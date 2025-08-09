@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { AttributeService } from './attribute.service';
 import { CreateAttributeDto } from './dto/create-attribute.dto';
 import { UpdateAttributeDto } from './dto/update-attribute.dto';
@@ -12,9 +12,33 @@ export class AttributeController {
     return this.svc.create(dto);
   }
 
+  // GET /attributes
+  // GET /attributes?categoryIds=c1,c2&linkType=direct,inherited&q=tea&page=1&pageSize=20&sort=name
   @Get()
-  findAll() {
-    return this.svc.findAll();
+  find(
+    @Query('categoryIds') categoryIds?: string | string[],
+    @Query('linkType') linkType?: string | string[],
+    @Query('q') q?: string,
+    @Query('page') page: string = '1',
+    @Query('pageSize') pageSize: string = '50',
+    @Query('sort') sort: 'name' | 'createdAt' | 'updatedAt' = 'name',
+  ) {
+    const ids = Array.isArray(categoryIds)
+      ? categoryIds.flatMap(v => v.split(',').map(s => s.trim()).filter(Boolean))
+      : (categoryIds ?? '').split(',').map(s => s.trim()).filter(Boolean);
+
+    const linkTypes = Array.isArray(linkType)
+      ? linkType.flatMap(v => v.split(',').map(s => s.trim()).filter(Boolean))
+      : (linkType ?? '').split(',').map(s => s.trim()).filter(Boolean);
+
+    return this.svc.findWithFilters({
+      categoryIds: ids.length ? ids : undefined,
+      linkTypes: linkTypes.length ? (linkTypes as any) : undefined,
+      q,
+      page: Number(page) || 1,
+      pageSize: Math.min(Math.max(Number(pageSize) || 50, 1), 200),
+      sort,
+    });
   }
 
   @Get(':id')
