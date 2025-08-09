@@ -1,14 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
-import { CategoryTreePathService } from '../../category-tree-path/category-tree-path.service';
+import { CategoryService } from '../../category/category.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CategoryService } from '../category.service';
+import { CategoryTreePathService } from '../../category-tree-path/category-tree-path.service';
+import { NotFoundException } from '@nestjs/common';
 
 describe('CategoryService', () => {
   let service: CategoryService;
 
   const now = new Date();
 
+  // Reusable tx mock (we use the same object as the tx inside $transaction)
   const prismaMock = {
     $transaction: jest.fn(async (cb: any) => cb(prismaMock)),
     category: {
@@ -20,28 +21,27 @@ describe('CategoryService', () => {
     },
   } as unknown as PrismaService;
 
-  // --- Path service mock ---
   const pathSvcMock = {
     addPathsForNewCategory: jest.fn(),
     rebuildSubtreePaths: jest.fn(),
   } as unknown as CategoryTreePathService;
 
-  const categoryBefore = {
-    id: 'c1',
-    name: 'Tea',
-    slug: 'tea',
+  const root = {
+    id: 'c_root',
+    name: 'Beverages',
+    slug: 'beverages',
     isLeaf: false,
     parentId: null as string | null,
     createdAt: now,
     updatedAt: now,
   };
 
-  const createdCategory = {
-    id: 'c2',
-    name: 'Green Tea',
-    slug: 'green-tea',
+  const child = {
+    id: 'c_child',
+    name: 'Tea',
+    slug: 'tea',
     isLeaf: true,
-    parentId: 'c1',
+    parentId: 'c_root',
     createdAt: now,
     updatedAt: now,
   };
@@ -60,98 +60,130 @@ describe('CategoryService', () => {
     service = module.get(CategoryService);
   });
 
-  // ---------- create ----------
-  it('create() should create category and add paths in one transaction', async () => {
-    (prismaMock.category.create as any).mockResolvedValue(createdCategory);
+  // -------- create --------
+  it('create() creates category and populates paths in a single transaction', async () => {
+    (prismaMock.category.create as any).mockResolvedValue(child);
 
     await service.create({
-      name: 'Green Tea',
-      slug: 'green-tea',
+      name: 'Tea',
+      slug: 'tea',
       isLeaf: true,
-      parentId: 'c1',
+      parentId: 'c_root',
     });
 
     expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
     expect(prismaMock.category.create).toHaveBeenCalledWith({
-      data: { name: 'Green Tea', slug: 'green-tea', isLeaf: true, parentId: 'c1' },
+      data: { name: 'Tea', slug: 'tea', isLeaf: true, parentId: 'c_root' },
     });
     expect(pathSvcMock.addPathsForNewCategory).toHaveBeenCalledTimes(1);
-    // first arg is the "tx" passed by $transaction — here we reuse prismaMock
     expect(pathSvcMock.addPathsForNewCategory).toHaveBeenCalledWith(
       prismaMock as any,
-      { id: createdCategory.id, parentId: createdCategory.parentId },
+      { id: 'c_child', parentId: 'c_root' },
     );
   });
 
-  // ---------- findAll ----------
-  it('findAll() should return categories ordered by name', async () => {
-    (prismaMock.category.findMany as any).mockResolvedValue([categoryBefore]);
+  // -------- findAll --------
+  it('findAll() returns categories ordered by name', async () => {
+    (prismaMock.category.findMany as any).mockResolvedValue([root, child]);
     const res = await service.findAll();
     expect(prismaMock.category.findMany).toHaveBeenCalledWith({ orderBy: { name: 'asc' } });
-    expect(res).toEqual([categoryBefore]);
+    expect(res).toEqual([root, child]);
   });
 
-  // ---------- findOne ----------
-  it('findOne() should return a category by id', async () => {
-    (prismaMock.category.findUnique as any).mockResolvedValue(categoryBefore);
-    const res = await service.findOne('c1');
-    expect(prismaMock.category.findUnique).toHaveBeenCalledWith({ where: { id: 'c1' } });
-    expect(res).toEqual(categoryBefore);
+  // -------- findOne --------
+  it('findOne() returns a category by id', async () => {
+    (prismaMock.category.findUnique as any).mockResolvedValue(root);
+    const res = await service.findOne('c_root');
+    expect(prismaMock.category.findUnique).toHaveBeenCalledWith({ where: { id: 'c_root' } });
+    expect(res).toEqual(root);
   });
 
-  // ---------- update (no parent change) ----------
-  it('update() should update and NOT rebuild paths when parentId unchanged or not provided', async () => {
-    (prismaMock.category.findUnique as any).mockResolvedValue({ id: 'c2', parentId: 'c1' });
-    (prismaMock.category.update as any).mockResolvedValue({ ...createdCategory, name: 'Updated' });
+  // -------- getTree --------
+  it('getTree() returns nested roots with children', async () => {
+    // Service selects: id, name, slug, parentId, isLeaf
+    (prismaMock.category.findMany as any).mockResolvedValue([
+      root,
+      child,
+      {
+        id: 'c_other_root',
+        name: 'Snacks',
+        slug: 'snacks',
+        isLeaf: false,
+        parentId: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
 
-    const res = await service.update('c2', { name: 'Updated' }); // no parentId in DTO
+    const tree = await service.getTree();
+
+    // Two roots expected
+    expect(Array.isArray(tree)).toBe(true);
+    const beverages = tree.find((n: any) => n.id === 'c_root');
+    const snacks = tree.find((n: any) => n.id === 'c_other_root');
+
+    expect(beverages).toBeDefined();
+    expect(snacks).toBeDefined();
+    expect(beverages.children).toBeDefined();
+    expect(beverages.children.length).toBe(1);
+    expect(beverages.children[0]).toMatchObject({
+      id: 'c_child',
+      name: 'Tea',
+      parentId: 'c_root',
+      children: [],
+    });
+    expect(snacks.children).toEqual([]);
+  });
+
+  // -------- update (no parent change) --------
+  it('update() updates but does not rebuild paths when parentId unchanged or absent', async () => {
+    (prismaMock.category.findUnique as any).mockResolvedValue({ id: 'c_child', parentId: 'c_root' });
+    (prismaMock.category.update as any).mockResolvedValue({ ...child, name: 'Tea (Updated)' });
+
+    const res = await service.update('c_child', { name: 'Tea (Updated)' });
 
     expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
     expect(prismaMock.category.update).toHaveBeenCalledWith({
-      where: { id: 'c2' },
-      data: { name: 'Updated' },
+      where: { id: 'c_child' },
+      data: { name: 'Tea (Updated)' },
     });
     expect(pathSvcMock.rebuildSubtreePaths).not.toHaveBeenCalled();
-    expect(res.name).toBe('Updated');
+    expect(res.name).toBe('Tea (Updated)');
   });
 
-  // ---------- update (parent change) ----------
-  it('update() should rebuild subtree paths when parentId changes', async () => {
-    (prismaMock.category.findUnique as any).mockResolvedValue({ id: 'c2', parentId: 'c1' });
-    (prismaMock.category.update as any).mockResolvedValue({ ...createdCategory, parentId: 'c-root' });
+  // -------- update (parent change) --------
+  it('update() rebuilds subtree paths when parentId changes', async () => {
+    (prismaMock.category.findUnique as any).mockResolvedValue({ id: 'c_child', parentId: 'c_root' });
+    (prismaMock.category.update as any).mockResolvedValue({ ...child, parentId: 'c_new_root' });
 
-    const res = await service.update('c2', { parentId: 'c-root' });
+    const res = await service.update('c_child', { parentId: 'c_new_root' });
 
     expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
     expect(prismaMock.category.update).toHaveBeenCalledWith({
-      where: { id: 'c2' },
-      data: { parentId: 'c-root' },
+      where: { id: 'c_child' },
+      data: { parentId: 'c_new_root' },
     });
     expect(pathSvcMock.rebuildSubtreePaths).toHaveBeenCalledTimes(1);
     expect(pathSvcMock.rebuildSubtreePaths).toHaveBeenCalledWith(
       prismaMock as any,
-      'c2',
-      'c-root',
+      'c_child',
+      'c_new_root',
     );
-    expect(res.parentId).toBe('c-root');
+    expect(res.parentId).toBe('c_new_root');
   });
 
-  // ---------- update (not found) ----------
-  it('update() should throw NotFound when category does not exist', async () => {
+  // -------- update (not found) --------
+  it('update() throws NotFound when category does not exist', async () => {
     (prismaMock.category.findUnique as any).mockResolvedValue(null);
-
-    await expect(service.update('missing', { name: 'X' }))
-      .rejects
-      .toBeInstanceOf(NotFoundException);
-
+    await expect(service.update('missing', { name: 'X' })).rejects.toBeInstanceOf(NotFoundException);
     expect(prismaMock.category.update).not.toHaveBeenCalled();
   });
 
-  // ---------- remove ----------
-  it('remove() should delete a category and return ok', async () => {
-    (prismaMock.category.delete as any).mockResolvedValue(categoryBefore);
-    const res = await service.remove('c1');
-    expect(prismaMock.category.delete).toHaveBeenCalledWith({ where: { id: 'c1' } });
+  // -------- remove --------
+  it('remove() deletes and returns ok', async () => {
+    (prismaMock.category.delete as any).mockResolvedValue(root);
+    const res = await service.remove('c_root');
+    expect(prismaMock.category.delete).toHaveBeenCalledWith({ where: { id: 'c_root' } });
     expect(res).toEqual({ ok: true });
   });
 });

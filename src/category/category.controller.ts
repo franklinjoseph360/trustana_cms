@@ -12,6 +12,11 @@ export class CategoryController {
     return this.svc.create(dto);
   }
 
+  @Get('tree')
+  tree() {
+    return this.svc.getTree();
+  }
+
   @Get()
   findAll() {
     return this.svc.findAll();

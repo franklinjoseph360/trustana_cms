@@ -32,6 +32,28 @@ export class CategoryService {
         return this.prisma.category.findUnique({ where: { id } });
     }
 
+    async getTree() {
+        const rows = await this.prisma.category.findMany({
+            orderBy: [{ parentId: 'asc' }, { name: 'asc' }],
+            select: { id: true, name: true, slug: true, parentId: true, isLeaf: true },
+        });
+
+        // index by id and prepare child arrays
+        const byId = new Map<string, any>();
+        rows.forEach((r) => byId.set(r.id, { ...r, children: [] as any[] }));
+
+        const roots: any[] = [];
+        for (const r of rows) {
+            const node = byId.get(r.id);
+            if (r.parentId && byId.has(r.parentId)) {
+                byId.get(r.parentId).children.push(node);
+            } else {
+                roots.push(node);
+            }
+        }
+        return roots;
+    }
+
     async update(id: string, dto: UpdateCategoryDto) {
         const before = await this.prisma.category.findUnique({
             where: { id },
