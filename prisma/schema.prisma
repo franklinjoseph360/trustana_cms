@@ -21,6 +21,7 @@ model Category {
   parentId         String?
   parent           Category?          @relation("CategoryToChildren", fields: [parentId], references: [id])
   children         Category[]         @relation("CategoryToChildren")
+  products         Product[]
   parentPaths      CategoryTreePath[] @relation("ChildToTreePath")
   childPaths       CategoryTreePath[] @relation("ParentToTreePath")
 
@@ -39,4 +40,15 @@ model CategoryTreePath {
   @@id([parentCategoryId, childCategoryId])
   @@index([childCategoryId])
   @@index([parentCategoryId])
+}
+
+model Product {
+  id          String    @id @default(uuid())
+  name        String
+  categoryId  String
+  category    Category  @relation(fields: [categoryId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([categoryId])
 }
