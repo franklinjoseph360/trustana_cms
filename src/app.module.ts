@@ -6,6 +6,7 @@ import { ConfigModule } from '@nestjs/config';
 import { HealthModule } from './health/health.module';
 import { CategoryModule } from './category/category.module';
 import { AttributeModule } from './attribute/attribute.module';
+import { ProductModule } from './product/product.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { AttributeModule } from './attribute/attribute.module';
     HealthModule,
     CategoryModule,
     AttributeModule,
+    ProductModule,
   ],
   controllers: [AppController],
   providers: [AppService],
