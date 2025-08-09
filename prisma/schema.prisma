@@ -13,3 +13,30 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model Category {
+  id               String             @id @default(uuid())
+  name             String
+  isLeaf           Boolean            @default(false)
+  parentId         String?
+  parent           Category?          @relation("CategoryToChildren", fields: [parentId], references: [id])
+  children         Category[]         @relation("CategoryToChildren")
+  parentPaths      CategoryTreePath[] @relation("ChildToTreePath")
+  childPaths       CategoryTreePath[] @relation("ParentToTreePath")
+
+  @@index([parentId])
+  @@unique([name, parentId])
+}
+
+model CategoryTreePath {
+  parentCategoryId String
+  childCategoryId  String
+  depth            Int
+
+  parentCategory   Category @relation("ParentToTreePath", fields: [parentCategoryId], references: [id])
+  childCategory    Category @relation("ChildToTreePath", fields: [childCategoryId], references: [id])
+
+  @@id([parentCategoryId, childCategoryId])
+  @@index([childCategoryId])
+  @@index([parentCategoryId])
+}
