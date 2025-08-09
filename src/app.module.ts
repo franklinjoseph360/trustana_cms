@@ -7,6 +7,7 @@ import { HealthModule } from './health/health.module';
 import { CategoryModule } from './category/category.module';
 import { AttributeModule } from './attribute/attribute.module';
 import { ProductModule } from './product/product.module';
+import { CategoryTreePathModule } from './category-tree-path/category-tree-path.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { ProductModule } from './product/product.module';
     CategoryModule,
     AttributeModule,
     ProductModule,
+    CategoryTreePathModule,
   ],
   controllers: [AppController],
   providers: [AppService],
