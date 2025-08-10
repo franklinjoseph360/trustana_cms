@@ -2,7 +2,9 @@ import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/commo
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 
+@ApiTags('categories')
 @Controller('categories')
 export class CategoryController {
   constructor(private readonly svc: CategoryService) {}
@@ -12,6 +14,8 @@ export class CategoryController {
     return this.svc.create(dto);
   }
 
+  @ApiOperation({ summary: 'Get category tree' })
+  @ApiOkResponse({ description: 'Array of Category nodes with nested children (categories)' })
   @Get('tree')
   tree() {
     return this.svc.getTree();
