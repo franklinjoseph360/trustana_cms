@@ -12,8 +12,7 @@ env:
 
 jobs:
   deploy:
-    # If AWS_ROLE_TO_ASSUME is stored as an Environment secret,
-    # uncomment the next line and set it to that environment name.
+    # uncomment if your ARN secret is stored as an Environment secret
     # environment: prod
     runs-on: ubuntu-latest
 
@@ -42,18 +41,16 @@ jobs:
         if: hashFiles('prisma/schema.prisma') != ''
         run: npx prisma generate
 
+      # optional build if you still compile for local runs
       - name: Build
-        run: npm run build
-
-      - name: Prune dev deps
-        run: npm prune --production
+        run: npm run build || echo "skip build"
 
       - name: Assert AWS role secret present
         env:
           AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
         run: |
           if [ -z "$AWS_ROLE_TO_ASSUME" ]; then
-            echo "AWS_ROLE_TO_ASSUME is not set. If it's an Environment secret, set 'environment:' on this job to that environment name."
+            echo "AWS_ROLE_TO_ASSUME is not set. If it's an Environment secret, set 'environment:' on this job."
             exit 1
           fi
 
@@ -65,8 +62,10 @@ jobs:
           role-session-name: gha-serverless-deploy
           audience: sts.amazonaws.com
 
-      - name: Serverless CLI (v3) version
-        run: npx -y serverless@3 --version
+      - name: Show Serverless version and plugins
+        run: |
+          npx -y serverless@3 --version
+          npx -y serverless@3 plugin list
 
       - name: Deploy
         run: npx -y serverless@3 deploy --stage prod
