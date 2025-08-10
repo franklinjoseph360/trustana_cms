@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAttributeDto } from './dto/create-attribute.dto';
@@ -17,7 +17,7 @@ interface FindAttributesInput {
 
 @Injectable()
 export class AttributeService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) { }
 
   create(dto: CreateAttributeDto) {
     return this.prisma.attribute.create({ data: dto });

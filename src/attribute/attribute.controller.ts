@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query } from '@nestjs/common';
 import { AttributeService } from './attribute.service';
 import { CreateAttributeDto } from './dto/create-attribute.dto';
 import { UpdateAttributeDto } from './dto/update-attribute.dto';
@@ -13,7 +13,7 @@ import {
 @ApiTags('Attributes')
 @Controller('attributes')
 export class AttributeController {
-  constructor(private readonly svc: AttributeService) { }
+  constructor(@Inject(AttributeService) private readonly svc: AttributeService) { }
 
   @Post()
   create(@Body() dto: CreateAttributeDto) {

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -8,8 +8,8 @@ import { CategoryTreePathService } from '../category-tree-path/category-tree-pat
 @Injectable()
 export class CategoryService {
     constructor(
-        private readonly prisma: PrismaService,
-        private readonly pathSvc: CategoryTreePathService,
+        @Inject(PrismaService) private readonly prisma: PrismaService,
+        @Inject(CategoryTreePathService) private readonly pathSvc: CategoryTreePathService,
     ) { }
 
     //CREATE: add self row and ancestor paths in the same transaction

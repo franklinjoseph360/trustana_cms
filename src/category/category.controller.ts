@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Param, Patch, Post } from '@nestjs/common';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -7,7 +7,7 @@ import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 @ApiTags('categories')
 @Controller('categories')
 export class CategoryController {
-  constructor(private readonly svc: CategoryService) {}
+  constructor(@Inject(CategoryService) private readonly svc: CategoryService) {}
 
   @Post()
   create(@Body() dto: CreateCategoryDto) {
