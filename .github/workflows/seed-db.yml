@@ -24,7 +24,6 @@ env:
 jobs:
   seed:
     if: ${{ github.event.inputs.confirm == 'SEED' }}
-    environment: ${{ github.event.inputs.environment }}
     runs-on: ubuntu-latest
     concurrency:
       group: seed-${{ github.event.inputs.environment }}
