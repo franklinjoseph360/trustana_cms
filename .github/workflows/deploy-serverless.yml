@@ -1,7 +1,5 @@
 name: Deploy Backend API with Serverless
 
-frameworkVersion: ">=3"
-
 on:
   push:
     branches: [ main ]
