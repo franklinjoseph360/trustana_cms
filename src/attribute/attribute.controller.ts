@@ -1,3 +1,4 @@
+// src/attribute/attribute.controller.ts
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { AttributeService } from './attribute.service';
 import { CreateAttributeDto } from './dto/create-attribute.dto';
@@ -12,12 +13,10 @@ export class AttributeController {
     return this.svc.create(dto);
   }
 
-  // GET /attributes
-  // GET /attributes?categoryIds=c1,c2&linkType=direct,inherited&q=tea&page=1&pageSize=20&sort=name
   @Get()
   find(
     @Query('categoryIds') categoryIds?: string | string[],
-    @Query('linkType') linkType?: string | string[],
+    @Query('linkType') linkType?: string | string[],   // CSV or repeated
     @Query('q') q?: string,
     @Query('page') page: string = '1',
     @Query('pageSize') pageSize: string = '50',
@@ -31,7 +30,7 @@ export class AttributeController {
       ? linkType.flatMap(v => v.split(',').map(s => s.trim()).filter(Boolean))
       : (linkType ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
-    return this.svc.findWithFilters({
+    return this.svc.findAttributes({
       categoryIds: ids.length ? ids : undefined,
       linkTypes: linkTypes.length ? (linkTypes as any) : undefined,
       q,
@@ -41,18 +40,7 @@ export class AttributeController {
     });
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.svc.findOne(id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateAttributeDto) {
-    return this.svc.update(id, dto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.svc.remove(id);
-  }
+  @Get(':id') findOne(@Param('id') id: string) { return this.svc.findOne(id); }
+  @Patch(':id') update(@Param('id') id: string, @Body() dto: UpdateAttributeDto) { return this.svc.update(id, dto); }
+  @Delete(':id') remove(@Param('id') id: string) { return this.svc.remove(id); }
 }
