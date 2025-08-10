@@ -1,13 +1,10 @@
-import { Controller, Get } from '@nestjs/common'
-import { PrismaService } from '../prisma/prisma.service'
+import { Controller, Get, HttpCode } from '@nestjs/common'
 
 @Controller('health')
 export class HealthController {
-  constructor(private readonly prisma: PrismaService) {}
-
   @Get()
-  async check() {
-    await this.prisma.$queryRaw`SELECT 1`
-    return { ok: true }
+  @HttpCode(200)
+  check() {
+    return { ok: true, ts: new Date().toISOString() }
   }
 }
