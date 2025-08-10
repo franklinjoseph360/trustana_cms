@@ -49,9 +49,13 @@ jobs:
         run: npm i -g serverless
 
       - name: Assert AWS role secret present
-        if: ${{ secrets.AWS_ROLE_TO_ASSUME == '' }}
+        env:
+          AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
         run: |
-          echo "AWS_ROLE_TO_ASSUME is not set for this job. If you stored it as an Environment secret, ensure the job's 'environment' matches your Environment name." && exit 1
+          if [ -z "$AWS_ROLE_TO_ASSUME" ]; then
+            echo "AWS_ROLE_TO_ASSUME is not set. If you stored it as an Environment secret, ensure the job's 'environment' matches your Environment name."
+            exit 1
+          fi
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4

@@ -96,3 +96,35 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+```
+  flowchart LR
+    Dev[(Developer)] --> Repo[GitHub repository]
+    Repo -->|push main| GA[GitHub Actions workflow]
+    GA --> Build[Install deps • Prisma generate • Build]
+    Build --> Package[Prune dev deps • Zip artifact]
+    GA --> OIDC[Assume role with OIDC]
+    OIDC --> SLS[Serverless deploy]
+    SLS --> CFN[CloudFormation] --> Lambda[(Lambda)]
+    CFN --> APIGW[(API Gateway)]
+```
+
+sequenceDiagram
+  actor Dev as Developer
+  participant GH as GitHub Actions
+  participant STS as AWS STS OIDC
+  participant SLS as Serverless CLI
+  participant CFN as CloudFormation
+  participant L as Lambda
+  participant API as API Gateway
+
+  Dev->>GH: Push to main
+  GH->>GH: Install • Build • Zip
+  GH->>STS: AssumeRoleWithWebIdentity
+  STS-->>GH: Temp credentials
+  GH->>SLS: serverless deploy stage prod
+  SLS->>CFN: Create or update stack
+  CFN->>L: Update function code
+  CFN->>API: Update HTTP API routes
+  CFN-->>GH: Stack outputs base URL
+  GH-->>Dev: Post deploy status and URL
