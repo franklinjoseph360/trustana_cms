@@ -8,9 +8,13 @@ on:
 env:
   AWS_REGION: ap-southeast-1
   NODE_VERSION: "18"
+  SLS_TELEMETRY_DISABLED: "1"
 
 jobs:
   deploy:
+    # If AWS_ROLE_TO_ASSUME is stored as an Environment secret,
+    # uncomment the next line and set it to that environment name.
+    # environment: prod
     runs-on: ubuntu-latest
 
     concurrency:
@@ -44,15 +48,12 @@ jobs:
       - name: Prune dev deps
         run: npm prune --production
 
-      - name: Install Serverless CLI
-        run: npm i -g serverless
-
       - name: Assert AWS role secret present
         env:
           AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
         run: |
           if [ -z "$AWS_ROLE_TO_ASSUME" ]; then
-            echo "AWS_ROLE_TO_ASSUME is not set. If you stored it as an Environment secret, ensure the job's 'environment' matches your Environment name."
+            echo "AWS_ROLE_TO_ASSUME is not set. If it's an Environment secret, set 'environment:' on this job to that environment name."
             exit 1
           fi
 
@@ -64,8 +65,11 @@ jobs:
           role-session-name: gha-serverless-deploy
           audience: sts.amazonaws.com
 
+      - name: Serverless CLI (v3) version
+        run: npx -y serverless@3 --version
+
       - name: Deploy
-        run: serverless deploy --stage prod
+        run: npx -y serverless@3 deploy --stage prod
 
       - name: Show endpoints
-        run: serverless info --verbose
+        run: npx -y serverless@3 info --verbose
