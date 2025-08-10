@@ -31,12 +31,20 @@ describe('AttributeController', () => {
   });
 
   it('GET /attributes (no params) → defaults', async () => {
-    (svcMock.findAttributes as any).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50, filters: { categories: [], attributeTypes: ['direct','inherited','global'] } });
-    await controller.find(undefined, undefined, undefined, undefined, undefined, undefined);
+    (svcMock.findAttributes as any).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 50,
+      filters: { categories: [], attributeTypes: ['direct', 'inherited', 'global'] },
+    });
+
+    // controller.find(categoryIds?, linkType?, page?, pageSize?, sort?)
+    await controller.find(undefined, undefined, undefined, undefined, undefined);
+
     expect(svcMock.findAttributes).toHaveBeenCalledWith({
       categoryIds: undefined,
       linkTypes: undefined,
-      q: undefined,
       page: 1,
       pageSize: 50,
       sort: 'name',
@@ -44,36 +52,83 @@ describe('AttributeController', () => {
   });
 
   it('GET /attributes with CSV categoryIds', async () => {
-    (svcMock.findAttributes as any).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50, filters: { categories: [], attributeTypes: ['direct','inherited','global'] } });
-    await controller.find('c1,c2', undefined, undefined, '1', '50', 'name');
-    expect(svcMock.findAttributes).toHaveBeenCalledWith(expect.objectContaining({ categoryIds: ['c1','c2'] }));
+    (svcMock.findAttributes as any).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 50,
+      filters: { categories: [], attributeTypes: ['direct', 'inherited', 'global'] },
+    });
+
+    await controller.find('c1,c2', undefined, '1', '50', 'name');
+
+    expect(svcMock.findAttributes).toHaveBeenCalledWith(
+      expect.objectContaining({ categoryIds: ['c1', 'c2'] }),
+    );
   });
 
   it('GET /attributes with repeated categoryIds', async () => {
-    (svcMock.findAttributes as any).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50, filters: { categories: [], attributeTypes: ['direct','inherited','global'] } });
-    await controller.find(['c1','c2'], undefined, undefined, '1', '50', 'name');
-    expect(svcMock.findAttributes).toHaveBeenCalledWith(expect.objectContaining({ categoryIds: ['c1','c2'] }));
+    (svcMock.findAttributes as any).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 50,
+      filters: { categories: [], attributeTypes: ['direct', 'inherited', 'global'] },
+    });
+
+    await controller.find(['c1', 'c2'] as any, undefined, '1', '50', 'name');
+
+    expect(svcMock.findAttributes).toHaveBeenCalledWith(
+      expect.objectContaining({ categoryIds: ['c1', 'c2'] }),
+    );
   });
 
   it('GET /attributes with linkType=direct,inherited (CSV)', async () => {
-    (svcMock.findAttributes as any).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50, filters: { categories: [], attributeTypes: ['direct','inherited','global'] } });
-    await controller.find(undefined, 'direct,inherited', undefined, '1', '50', 'name');
-    expect(svcMock.findAttributes).toHaveBeenCalledWith(expect.objectContaining({ linkTypes: ['direct','inherited'] }));
+    (svcMock.findAttributes as any).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 50,
+      filters: { categories: [], attributeTypes: ['direct', 'inherited', 'global'] },
+    });
+
+    await controller.find(undefined, 'direct,inherited', '1', '50', 'name');
+
+    expect(svcMock.findAttributes).toHaveBeenCalledWith(
+      expect.objectContaining({ linkTypes: ['direct', 'inherited'] }),
+    );
   });
 
   it('GET /attributes with repeated linkType', async () => {
-    (svcMock.findAttributes as any).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50, filters: { categories: [], attributeTypes: ['direct','inherited','global'] } });
-    await controller.find(undefined, ['global','direct'], undefined, '1', '50', 'name');
-    expect(svcMock.findAttributes).toHaveBeenCalledWith(expect.objectContaining({ linkTypes: ['global','direct'] }));
+    (svcMock.findAttributes as any).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 50,
+      filters: { categories: [], attributeTypes: ['direct', 'inherited', 'global'] },
+    });
+
+    await controller.find(undefined, ['global', 'direct'] as any, '1', '50', 'name');
+
+    expect(svcMock.findAttributes).toHaveBeenCalledWith(
+      expect.objectContaining({ linkTypes: ['global', 'direct'] }),
+    );
   });
 
-  it('GET /attributes with q/page/pageSize/sort', async () => {
-    (svcMock.findAttributes as any).mockResolvedValue({ items: [], total: 0, page: 3, pageSize: 10, filters: { categories: [], attributeTypes: ['direct','inherited','global'] } });
-    await controller.find('c1', 'global', 'tea', '3', '10', 'updatedAt');
+  it('GET /attributes with page/pageSize/sort', async () => {
+    (svcMock.findAttributes as any).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 3,
+      pageSize: 10,
+      filters: { categories: [], attributeTypes: ['direct', 'inherited', 'global'] },
+    });
+
+    await controller.find('c1', 'global', '3', '10', 'updatedAt');
+
     expect(svcMock.findAttributes).toHaveBeenCalledWith({
       categoryIds: ['c1'],
       linkTypes: ['global'],
-      q: 'tea',
       page: 3,
       pageSize: 10,
       sort: 'updatedAt',

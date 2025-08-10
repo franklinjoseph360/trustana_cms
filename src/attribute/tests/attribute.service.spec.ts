@@ -51,7 +51,7 @@ describe('AttributeService.findAttributes', () => {
 
     const res = await service.findAttributes({
       page: 1, pageSize: 50, sort: 'name',
-    });
+    } as any);
 
     // verify prisma calls
     expect(prismaMock.attribute.findMany).toHaveBeenCalledWith(expect.objectContaining({
@@ -75,22 +75,23 @@ describe('AttributeService.findAttributes', () => {
           type: 'NUMBER',
           isGlobal: false,
           productCount: 25,
-          categories: expect.any(Array), // Note: in "no categoryIds" case we set category: null earlier, but now we return categories[]
-          applicability: undefined,      // not computed without categoryIds
+          categories: [
+            { id: 'cat-tea', name: 'Tea', slug: 'tea' },
+            { id: 'cat-coffee', name: 'Coffee', slug: 'coffee' },
+          ],
+          applicability: undefined, // not computed without categoryIds
         },
       ],
       total: 1,
       page: 1,
       pageSize: 50,
-      filters: expect.any(Object), // filters included in other branches; optional here
+      filters: expect.any(Object),
     });
   });
 
   it('B) with categoryIds (no linkTypes) → applicable; returns categories[] and applicability matrix', async () => {
     // main page query
-    (prismaMock.attribute.findMany as any).mockResolvedValueOnce([
-      makeAttr(),
-    ]);
+    (prismaMock.attribute.findMany as any).mockResolvedValueOnce([makeAttr()]);
     (prismaMock.attribute.count as any).mockResolvedValueOnce(1);
 
     // ancestor depths for two selected nodes
@@ -105,11 +106,11 @@ describe('AttributeService.findAttributes', () => {
     const res = await service.findAttributes({
       categoryIds: ['c_leaf_a', 'c_leaf_b'],
       page: 1, pageSize: 20, sort: 'name',
-    });
+    } as any);
 
     // prisma where includes applicable (global OR ancestor-linked)
     const call = (prismaMock.attribute.findMany as any).mock.calls[0][0];
-    expect(call.where.AND[0]).toEqual({
+    expect(call.where).toEqual({
       OR: [
         { isGlobal: true },
         {
@@ -118,7 +119,7 @@ describe('AttributeService.findAttributes', () => {
               category: {
                 parentPaths: {
                   some: {
-                    childCategoryId: { in: ['c_leaf_a','c_leaf_b'] },
+                    childCategoryId: { in: ['c_leaf_a', 'c_leaf_b'] },
                     depth: { gte: 0 },
                   },
                 },
@@ -153,11 +154,25 @@ describe('AttributeService.findAttributes', () => {
 
     await service.findAttributes({
       categoryIds: ['cX'],
-      linkTypes: ['direct','inherited'],
+      linkTypes: ['direct', 'inherited'],
       page: 1, pageSize: 20, sort: 'name',
-    });
+    } as any);
 
     const call = (prismaMock.attribute.findMany as any).mock.calls[0][0];
+    expect(call.where.AND[0]).toEqual({
+      OR: [
+        { isGlobal: true },
+        {
+          links: {
+            some: {
+              category: {
+                parentPaths: { some: { childCategoryId: { in: ['cX'] }, depth: { gte: 0 } } },
+              },
+            },
+          },
+        },
+      ],
+    });
     expect(call.where.AND[1]).toEqual({
       OR: [
         { links: { some: { category: { parentPaths: { some: { childCategoryId: { in: ['cX'] }, depth: 0 } } } } } },
@@ -166,33 +181,37 @@ describe('AttributeService.findAttributes', () => {
     });
   });
 
-  it('D) not-applicable (exclusive) + q → returns items not in applicable set, with filters.categories', async () => {
+  it('D) not-applicable (exclusive) → returns items not in applicable set, with filters.categories', async () => {
     // first call to collect applicable ids
     (prismaMock.attribute.findMany as any).mockResolvedValueOnce([{ id: 'a1' }, { id: 'a2' }]);
 
     // transaction page
     (prismaMock.attribute.findMany as any).mockResolvedValueOnce([
-      makeAttr({ id: 'a3', name: 'Decaf', links: [{ categoryId: 'cat-decaf', category: { id: 'cat-decaf', name: 'Decaf', slug: 'decaf' } }], _count: { values: 5 } }),
+      makeAttr({
+        id: 'a3',
+        name: 'Decaf',
+        links: [{ categoryId: 'cat-decaf', category: { id: 'cat-decaf', name: 'Decaf', slug: 'decaf' } }],
+        _count: { values: 5 },
+      }),
     ]);
     (prismaMock.attribute.count as any).mockResolvedValueOnce(1);
 
     const res = await service.findAttributes({
       categoryIds: ['c1'],
       linkTypes: ['not-applicable'],
-      q: 'decaf',
       page: 2, pageSize: 10, sort: 'updatedAt',
-    });
+    } as any);
 
-    // verify NOT IN where (second findMany)
+    // verify NOT IN where on the second findMany (inside transaction)
     const secondCall = (prismaMock.attribute.findMany as any).mock.calls[1][0];
-    expect(secondCall.where.AND[0].id.notIn).toEqual(['a1','a2']);
+    expect(secondCall.where.id.notIn).toEqual(['a1', 'a2']);
     expect(secondCall.orderBy).toEqual({ updatedAt: 'asc' });
     expect(secondCall.skip).toBe(10);
     expect(secondCall.take).toBe(10);
 
     // result includes filters.categories extracted from page
     expect(res.filters.categories).toEqual([{ id: 'cat-decaf', name: 'Decaf', slug: 'decaf' }]);
-    expect(res.filters.attributeTypes).toEqual(['direct','inherited','global']);
+    expect(res.filters.attributeTypes).toEqual(['direct', 'inherited', 'global']);
 
     // shape
     expect(res.items[0]).toMatchObject({
@@ -200,36 +219,22 @@ describe('AttributeService.findAttributes', () => {
       name: 'Decaf',
       productCount: 5,
       categories: [{ id: 'cat-decaf', name: 'Decaf', slug: 'decaf' }],
-      applicability: [
-        { categoryId: 'c1', linkType: 'none' },
-      ],
+      applicability: [{ categoryId: 'c1', linkType: 'none' }],
     });
   });
 
-it('E) search and sort in no-category case', async () => {
-  (prismaMock.attribute.findMany as any).mockResolvedValueOnce([makeAttr()]);
-  (prismaMock.attribute.count as any).mockResolvedValueOnce(1);
+  it('E) sort in no-category case', async () => {
+    (prismaMock.attribute.findMany as any).mockResolvedValueOnce([makeAttr()]);
+    (prismaMock.attribute.count as any).mockResolvedValueOnce(1);
 
-  await service.findAttributes({
-    q: 'caff',
-    page: 1, pageSize: 25, sort: 'createdAt',
+    await service.findAttributes({
+      page: 1, pageSize: 25, sort: 'createdAt',
+    } as any);
+
+    const call = (prismaMock.attribute.findMany as any).mock.calls[0][0];
+    expect(call.orderBy).toEqual({ createdAt: 'asc' });
+    expect(call.skip).toBe(0);
+    expect(call.take).toBe(25);
+    expect(call.where).toEqual({});
   });
-
-  const call = (prismaMock.attribute.findMany as any).mock.calls[0][0];
-  expect(call.orderBy).toEqual({ createdAt: 'asc' });
-  expect(call.skip).toBe(0);
-  expect(call.take).toBe(25);
-
-  // tolerate { OR: [...] } or { AND: [ { OR: [...] } ] }
-  const or =
-    call.where?.OR ??
-    (Array.isArray(call.where?.AND)
-      ? call.where.AND.find((w: any) => w?.OR)?.OR
-      : undefined);
-
-  expect(Array.isArray(or)).toBe(true);
-  expect(or![0].name.contains).toBe('caff');
-  expect(or![1].slug.contains).toBe('caff');
-});
-
 });

@@ -17,7 +17,7 @@ interface FindAttributesInput {
 
 @Injectable()
 export class AttributeService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   create(dto: CreateAttributeDto) {
     return this.prisma.attribute.create({ data: dto });
@@ -41,52 +41,45 @@ export class AttributeService {
    * - filters: { categories: [...], attributeTypes: ['direct','inherited','global'] }
    */
   async findAttributes(input: FindAttributesInput) {
-    const { categoryIds, linkTypes, q, page, pageSize, sort } = input;
+    const { categoryIds, linkTypes, page, pageSize, sort } = input;
 
     const orderBy: Prisma.AttributeOrderByWithRelationInput =
       sort === 'name' ? { name: 'asc' } :
-      sort === 'createdAt' ? { createdAt: 'asc' } :
-      { updatedAt: 'asc' };
+        sort === 'createdAt' ? { createdAt: 'asc' } :
+          { updatedAt: 'asc' };
 
-    const qClause: Prisma.AttributeWhereInput | undefined = q
-      ? {
-          OR: [
-            { name: { contains: q, mode: Prisma.QueryMode.insensitive } },
-            { slug: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          ],
-        }
-      : undefined;
-
-    // ---------- base applicability ----------
+    // base applicability
     const applicableWhere: Prisma.AttributeWhereInput = categoryIds?.length
       ? {
-          OR: [
-            { isGlobal: true },
-            {
-              links: {
-                some: {
-                  category: {
-                    parentPaths: {
-                      some: {
-                        childCategoryId: { in: categoryIds },
-                        depth: { gte: 0 }, // 0 direct, >0 inherited
-                      },
+        OR: [
+          { isGlobal: true },
+          {
+            links: {
+              some: {
+                category: {
+                  parentPaths: {
+                    some: {
+                      childCategoryId: { in: categoryIds },
+                      depth: { gte: 0 },
                     },
                   },
                 },
               },
             },
-          ],
-        }
-      : {}; // when no categoryIds, list everything (subject to q)
+          },
+        ],
+      }
+      : {};
 
-    // ---------- linkTypes handling ----------
-    // not-applicable is exclusive, return attributes NOT in applicable set
+    // not applicable branch
     if (categoryIds?.length && linkTypes?.includes('not-applicable')) {
-      const applicableIds = await this.prisma.attribute.findMany({ where: applicableWhere, select: { id: true } });
+      const applicableIds = await this.prisma.attribute.findMany({
+        where: applicableWhere,
+        select: { id: true },
+      });
       const exclude = applicableIds.map(a => a.id);
-      let whereClause: Prisma.AttributeWhereInput = { id: { notIn: exclude } };
-      if (qClause) whereClause = { AND: [whereClause, qClause] };
+
+      const whereClause: Prisma.AttributeWhereInput = { id: { notIn: exclude } };
 
       const [pageItems, total] = await this.prisma.$transaction([
         this.prisma.attribute.findMany({
@@ -102,7 +95,6 @@ export class AttributeService {
         this.prisma.attribute.count({ where: whereClause }),
       ]);
 
-      // categories filter values from current page
       const filterCats = uniqueCatsFrom(pageItems);
 
       return {
@@ -116,14 +108,15 @@ export class AttributeService {
           categories: a.links.map(l => l.category),
           applicability: categoryIds.map(cid => ({ categoryId: cid, linkType: 'none' as const })),
         })),
-        total, page, pageSize,
-        filters: { categories: filterCats, attributeTypes: ['direct','inherited','global'] },
+        total,
+        page,
+        pageSize,
+        filters: { categories: filterCats, attributeTypes: ['direct', 'inherited', 'global'] },
       };
     }
 
-    // refiners for direct/inherited/global (if provided)
-    let refinedWhere: Prisma.AttributeWhereInput =
-      categoryIds?.length ? applicableWhere : (qClause ?? {});
+    // refine for direct or inherited or global
+    let refinedWhere: Prisma.AttributeWhereInput = categoryIds?.length ? applicableWhere : {};
     if (categoryIds?.length && linkTypes && linkTypes.length > 0) {
       const ORs: Prisma.AttributeWhereInput[] = [];
       if (linkTypes.includes('global')) ORs.push({ isGlobal: true });
@@ -131,9 +124,7 @@ export class AttributeService {
         ORs.push({
           links: {
             some: {
-              category: {
-                parentPaths: { some: { childCategoryId: { in: categoryIds }, depth: 0 } },
-              },
+              category: { parentPaths: { some: { childCategoryId: { in: categoryIds }, depth: 0 } } },
             },
           },
         });
@@ -142,9 +133,7 @@ export class AttributeService {
         ORs.push({
           links: {
             some: {
-              category: {
-                parentPaths: { some: { childCategoryId: { in: categoryIds }, depth: { gt: 0 } } },
-              },
+              category: { parentPaths: { some: { childCategoryId: { in: categoryIds }, depth: { gt: 0 } } } },
             },
           },
         });
@@ -154,16 +143,6 @@ export class AttributeService {
       }
     }
 
-    // add q to where
-    if (qClause) {
-      refinedWhere = 'AND' in refinedWhere
-        ? { AND: [...(refinedWhere.AND as any[]), qClause] }
-        : { AND: [refinedWhere, qClause] };
-    } else if (!('AND' in refinedWhere) && (categoryIds?.length || Object.keys(refinedWhere).length)) {
-      refinedWhere = { AND: [refinedWhere] };
-    }
-
-    // ---------- fetch page ----------
     const [pageItems, total] = await this.prisma.$transaction([
       this.prisma.attribute.findMany({
         where: refinedWhere,
@@ -172,37 +151,42 @@ export class AttributeService {
         take: pageSize,
         include: {
           links: { include: { category: { select: { id: true, name: true, slug: true } } } },
-          _count: { select: { values: true } }, // product usage count
+          _count: { select: { values: true } },
         },
       }),
       this.prisma.attribute.count({ where: refinedWhere }),
     ]);
 
-    // ---------- build applicability per selected category ----------
-    let applicabilityByAttr: Map<string, { categoryId: string; linkType: 'direct' | 'inherited'; depth: number }[]> | undefined;
+    // applicability per selected category
+    let applicabilityByAttr:
+      | Map<string, { categoryId: string; linkType: 'direct' | 'inherited' | 'global' | 'none'; depth?: number }[]>
+      | undefined;
 
     if (categoryIds?.length) {
-      // load all ancestor depths for provided categoryIds
       const paths = await this.prisma.categoryTreePath.findMany({
         where: { childCategoryId: { in: categoryIds } },
         select: { parentCategoryId: true, childCategoryId: true, depth: true },
       });
 
-      // child -> (ancestor -> depth)
       const depthMatrix = new Map<string, Map<string, number>>();
       for (const p of paths) {
         let row = depthMatrix.get(p.childCategoryId);
-        if (!row) { row = new Map(); depthMatrix.set(p.childCategoryId, row); }
+        if (!row) {
+          row = new Map();
+          depthMatrix.set(p.childCategoryId, row);
+        }
         const prev = row.get(p.parentCategoryId);
         row.set(p.parentCategoryId, prev === undefined ? p.depth : Math.min(prev, p.depth));
       }
 
       applicabilityByAttr = new Map();
-
       for (const a of pageItems) {
-        const rows: { categoryId: string; linkType: 'direct'|'inherited'|'global'|'none'; depth?: number }[] = [];
+        const rows: { categoryId: string; linkType: 'direct' | 'inherited' | 'global' | 'none'; depth?: number }[] = [];
         for (const cid of categoryIds) {
-          if (a.isGlobal) { rows.push({ categoryId: cid, linkType: 'global' }); continue; }
+          if (a.isGlobal) {
+            rows.push({ categoryId: cid, linkType: 'global' });
+            continue;
+          }
           const depthRow = depthMatrix.get(cid);
           let best: { depth: number } | undefined;
           if (depthRow) {
@@ -214,14 +198,12 @@ export class AttributeService {
           if (!best) rows.push({ categoryId: cid, linkType: 'none' });
           else rows.push({ categoryId: cid, linkType: best.depth === 0 ? 'direct' : 'inherited', depth: best.depth });
         }
-        applicabilityByAttr.set(a.id, rows as any);
+        applicabilityByAttr.set(a.id, rows);
       }
     }
 
-    // ---------- filters payload for UI (from current page) ----------
     const filterCats = uniqueCatsFrom(pageItems);
 
-    // ---------- final shape ----------
     return {
       items: pageItems.map(a => ({
         id: a.id,
@@ -230,15 +212,15 @@ export class AttributeService {
         type: a.type,
         isGlobal: a.isGlobal,
         productCount: a._count.values,
-        // all categories the attribute is directly linked to
         categories: a.links.map(l => l.category),
-        // per-selected category applicability (only when categoryIds given)
         applicability: categoryIds?.length ? applicabilityByAttr!.get(a.id) : undefined,
       })),
-      total, page, pageSize,
+      total,
+      page,
+      pageSize,
       filters: {
         categories: filterCats,
-        attributeTypes: ['direct','inherited','global'],
+        attributeTypes: ['direct', 'inherited', 'global'],
       },
     };
   }

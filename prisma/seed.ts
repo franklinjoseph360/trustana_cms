@@ -1,10 +1,12 @@
 import { PrismaClient } from '@prisma/client';
 import { seedCategories } from './seeds/categories';
+import { seedAttributes } from './seeds/attributes';
 
 const prisma = new PrismaClient();
 
 async function main() {
   await seedCategories(prisma);
+  await seedAttributes(prisma);
 }
 
 main()
