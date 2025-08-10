@@ -1,3 +1,5 @@
+import 'source-map-support/register'
+import 'reflect-metadata'
 import { Handler } from 'aws-lambda'
 import serverlessExpress from '@vendia/serverless-express'
 import { NestFactory } from '@nestjs/core'
@@ -9,9 +11,7 @@ let cached: Handler | null = null
 
 async function bootstrap(): Promise<Handler> {
   const expressApp = express()
-  const app = await NestFactory.create(AppModule, new ExpressAdapter(expressApp), {
-    bufferLogs: true,
-  })
+  const app = await NestFactory.create(AppModule, new ExpressAdapter(expressApp), { bufferLogs: true })
   app.enableCors()
   await app.init()
   return serverlessExpress({ app: expressApp })

@@ -1,6 +1,9 @@
 service: trustana-cms-api
 frameworkVersion: ">=3"
 
+plugins:
+  - serverless-esbuild
+
 provider:
   name: aws
   region: ap-southeast-1
@@ -8,12 +11,16 @@ provider:
   architecture: arm64
   memorySize: 512
   timeout: 15
+  logs:
+    httpApi: true
   environment:
     NODE_OPTIONS: "--enable-source-maps"
+    AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
 
 functions:
   api:
-    handler: dist/lambda.handler
+    name: trustana-cms-api-prod
+    handler: src/lambda.handler
     events:
       - httpApi:
           method: ANY
@@ -22,13 +29,32 @@ functions:
           method: ANY
           path: /{proxy+}
 
+custom:
+  esbuild:
+    bundle: true
+    minify: true
+    sourcemap: true
+    keepNames: true
+    platform: node
+    target: node18
+    exclude:
+      - aws-sdk
+    external:
+      - "@prisma/client"
+      - "@nestjs/microservices"
+      - "@nestjs/websockets"
+      - "@nestjs/websockets/socket-module"
+      - "@nestjs/microservices/microservices-module"
+      - "class-transformer/storage"
+
 package:
   patterns:
-    - dist/**
-    - node_modules/**
-    - package.json
-    - package-lock.json
+    - node_modules/@prisma/client/**
+    - node_modules/.prisma/**
     - prisma/**
     - "!**/*.spec.*"
+    - "!**/*.test.*"
+    - "!src/**"
     - "!.git/**"
     - "!.github/**"
+
