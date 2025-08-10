@@ -1,4 +1,4 @@
-name: Deploy Backend API with Serverless
+name: Deploy Backend CMS API app with Serverless
 
 on:
   push:
@@ -11,7 +11,13 @@ env:
 
 jobs:
   deploy:
+    environment: prod
     runs-on: ubuntu-latest
+
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+
     permissions:
       id-token: write
       contents: read
@@ -42,12 +48,18 @@ jobs:
       - name: Install Serverless CLI
         run: npm i -g serverless
 
+      - name: Assert AWS role secret present
+        if: ${{ secrets.AWS_ROLE_TO_ASSUME == '' }}
+        run: |
+          echo "AWS_ROLE_TO_ASSUME is not set for this job. If you stored it as an Environment secret, ensure the job's 'environment' matches your Environment name." && exit 1
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           role-session-name: gha-serverless-deploy
+          audience: sts.amazonaws.com
 
       - name: Deploy
         run: serverless deploy --stage prod
