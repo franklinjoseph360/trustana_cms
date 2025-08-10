@@ -17,6 +17,23 @@ provider:
   environment:
     NODE_OPTIONS: "--enable-source-maps"
     AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+    DATABASE_URL: ${ssm:/trustana-cms/prod/DATABASE_URL~true}
+
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - ssm:GetParameter
+            - ssm:GetParameters
+          Resource:
+            - arn:aws:ssm:ap-southeast-1:${aws:accountId}:parameter/trustana-cms/prod/*
+        - Effect: Allow
+          Action: kms:Decrypt
+          Resource: "*"
+          Condition:
+            StringEquals:
+              kms:ViaService: ssm.ap-southeast-1.amazonaws.com
 
 functions:
   api:
@@ -58,4 +75,3 @@ package:
     - "!src/**"
     - "!.git/**"
     - "!.github/**"
-
