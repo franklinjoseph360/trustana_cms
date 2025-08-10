@@ -63,12 +63,15 @@ custom:
       - "@nestjs/websockets"
       - "@nestjs/websockets/socket-module"
       - "@nestjs/microservices/microservices-module"
-      - "class-transformer/storage"
+      - "class-transformer/storage"     
+      - "swagger-ui-express"
+      - "swagger-ui-dist"  
 
 package:
   patterns:
     - node_modules/@prisma/client/**
     - node_modules/.prisma/**
+    - node_modules/swagger-ui-dist/** 
     - prisma/**
     - "!**/*.spec.*"
     - "!**/*.test.*"
