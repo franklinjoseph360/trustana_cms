@@ -1,0 +1,87 @@
+name: Seed database (Prisma)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment name (e.g., prod or stage)"
+        required: true
+        default: "prod"
+      run_migrate:
+        description: "Run prisma migrate deploy before seeding?"
+        type: boolean
+        required: true
+        default: true
+      confirm:
+        description: 'Type "SEED" to confirm'
+        required: true
+        default: ""
+
+env:
+  AWS_REGION: ap-southeast-1
+  NODE_VERSION: "18"
+
+jobs:
+  seed:
+    if: ${{ github.event.inputs.confirm == 'SEED' }}
+    environment: ${{ github.event.inputs.environment }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: seed-${{ github.event.inputs.environment }}
+      cancel-in-progress: false
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: gha-seed-db
+          audience: sts.amazonaws.com
+
+      - name: Read DATABASE_URL from SSM
+        id: ssm
+        env:
+          PARAM_PATH: /trustana-cms/${{ github.event.inputs.environment }}/DATABASE_URL
+        run: |
+          URL=$(aws ssm get-parameter --region "${{ env.AWS_REGION }}" \
+            --name "$PARAM_PATH" --with-decryption \
+            --query Parameter.Value --output text)
+          if [ -z "$URL" ] || [ "$URL" = "None" ]; then
+            echo "DATABASE_URL parameter not found at $PARAM_PATH" >&2
+            exit 1
+          fi
+          echo "DATABASE_URL=$URL" >> "$GITHUB_ENV"
+          echo "Using parameter: $PARAM_PATH"
+
+      - name: Optional reachability check
+        run: |
+          H=$(node -e "console.log(new URL(process.env.DATABASE_URL).hostname)")
+          P=$(node -e "const u=new URL(process.env.DATABASE_URL);console.log(u.port||'5432')")
+          (echo > /dev/tcp/$H/$P) >/dev/null 2>&1 && echo "OK: $H:$P reachable" || (echo "WARN: $H:$P not reachable from runner"; exit 0)
+
+      - name: Run migrations
+        if: ${{ fromJSON(github.event.inputs.run_migrate) }}
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: npx prisma migrate deploy
+
+      - name: Seed via Prisma
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: npx prisma db seed
