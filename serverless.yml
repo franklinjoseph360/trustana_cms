@@ -1,5 +1,5 @@
 service: trustana-cms-api
-frameworkVersion: "3"
+frameworkVersion: ">=3"
 
 provider:
   name: aws
