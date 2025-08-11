@@ -45,28 +45,11 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          role-session-name: gha-seed-db
-          audience: sts.amazonaws.com
-
-      - name: Read DATABASE_URL from SSM
-        id: ssm
-        env:
-          PARAM_PATH: /trustana-cms/${{ github.event.inputs.environment }}/DATABASE_URL
+      # Use direct connection URL for migrations/seeding
+      - name: Set DATABASE_URL for direct connection
         run: |
-          URL=$(aws ssm get-parameter --region "${{ env.AWS_REGION }}" \
-            --name "$PARAM_PATH" --with-decryption \
-            --query Parameter.Value --output text)
-          if [ -z "$URL" ] || [ "$URL" = "None" ]; then
-            echo "DATABASE_URL parameter not found at $PARAM_PATH" >&2
-            exit 1
-          fi
-          echo "DATABASE_URL=$URL" >> "$GITHUB_ENV"
-          echo "Using parameter: $PARAM_PATH"
+          echo "DATABASE_URL=${{ secrets.DATABASE_MIGRATION_URL }}" >> "$GITHUB_ENV"
+          echo "Using direct connection for seeding: ${{ github.event.inputs.environment }}"
 
       - name: Optional reachability check
         run: |
