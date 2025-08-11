@@ -19,6 +19,8 @@ async function bootstrap() {
     }),
   );
 
+  app.useGlobalFilters(new AllExceptionsFilter());
+
   const config = new DocumentBuilder()
     .setTitle('Trustana - Attributes API')
     .setVersion('1.0.0')
@@ -26,8 +28,6 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);
-
-  app.useGlobalFilters(new AllExceptionsFilter());
 
   await app.listen(3000);
 }
