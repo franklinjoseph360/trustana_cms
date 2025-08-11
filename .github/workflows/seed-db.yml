@@ -45,17 +45,15 @@ jobs:
       - name: Install
         run: npm ci
 
-      # Use direct connection URL for migrations/seeding
+      # use the DIRECT connection for migrations and seeding
       - name: Set DATABASE_URL for direct connection
         run: |
           echo "DATABASE_URL=${{ secrets.DATABASE_MIGRATION_URL }}" >> "$GITHUB_ENV"
-          echo "Using direct connection for seeding: ${{ github.event.inputs.environment }}"
+          node -e "const u=new URL(process.env.DATABASE_URL); if(u.hostname.includes('pooler.supabase.com')) { console.error('ERROR: DATABASE_MIGRATION_URL must be the direct host db.<ref>.supabase.co:5432'); process.exit(1);} console.log('Using direct host:', u.hostname)"
 
-      - name: Optional reachability check
-        run: |
-          H=$(node -e "console.log(new URL(process.env.DATABASE_URL).hostname)")
-          P=$(node -e "const u=new URL(process.env.DATABASE_URL);console.log(u.port||'5432')")
-          (echo > /dev/tcp/$H/$P) >/dev/null 2>&1 && echo "OK: $H:$P reachable" || (echo "WARN: $H:$P not reachable from runner"; exit 0)
+      - name: Generate Prisma client
+        if: hashFiles('prisma/schema.prisma') != ''
+        run: npx prisma generate
 
       - name: Run migrations
         if: ${{ fromJSON(github.event.inputs.run_migrate) }}
