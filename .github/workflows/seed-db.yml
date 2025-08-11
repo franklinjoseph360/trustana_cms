@@ -3,15 +3,6 @@ name: Seed database (Prisma)
 on:
   workflow_dispatch:
     inputs:
-      environment:
-        description: "Environment name (e.g., prod or stage)"
-        required: true
-        default: "prod"
-      run_migrate:
-        description: "Run prisma migrate deploy before seeding?"
-        type: boolean
-        required: true
-        default: true
       confirm:
         description: 'Type "SEED" to confirm'
         required: true
@@ -25,11 +16,8 @@ jobs:
   seed:
     if: ${{ github.event.inputs.confirm == 'SEED' }}
     runs-on: ubuntu-latest
-    concurrency:
-      group: seed-${{ github.event.inputs.environment }}
-      cancel-in-progress: false
+
     permissions:
-      id-token: write
       contents: read
 
     steps:
@@ -42,48 +30,17 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Install
+      - name: Install dependencies
         run: npm ci
-
-      - name: Set DATABASE_URL for direct connection
-        env:
-          RAW: ${{ secrets.DATABASE_MIGRATION_URL }}
-        run: |
-          if [ -z "$RAW" ]; then
-            echo "ERROR: DATABASE_MIGRATION_URL secret is missing"
-            exit 1
-          fi
-
-          node -e 'const v=process.env.RAW; try{ new URL(v) } catch(e){ console.error("ERROR: DATABASE_MIGRATION_URL is not a valid URL"); process.exit(1) }'
-
-          node -e 'const u=new URL(process.env.RAW); if(u.hostname.includes("pooler.supabase.com")){ console.error("ERROR: Use the direct host db.<ref>.supabase.co:5432 for seeding, not the pooler"); process.exit(1) }'
-
-          URL="$RAW"
-          if node -e 'const u=new URL(process.env.URL); process.exit(u.searchParams.has("sslmode")?0:1)'; then
-            :
-          else
-            if [[ "$URL" == *"?"* ]]; then
-              URL="${URL}&sslmode=require"
-            else
-              URL="${URL}?sslmode=require"
-            fi
-          fi
-
-          echo "DATABASE_URL=$URL" >> "$GITHUB_ENV"
-          node -e 'const u=new URL(process.env.URL); console.log("[seed] Using host:", u.hostname, "port:", u.port || "5432")' | sed 's/.*/&/' \
-            || true
 
       - name: Generate Prisma client
         if: hashFiles('prisma/schema.prisma') != ''
         run: npx prisma generate
 
-      - name: Run migrations
-        if: ${{ fromJSON(github.event.inputs.run_migrate) }}
+      - name: Run Prisma seed
         env:
-          DATABASE_URL: ${{ env.DATABASE_URL }}
-        run: npx prisma migrate deploy
-
-      - name: Seed via Prisma
-        env:
-          DATABASE_URL: ${{ env.DATABASE_URL }}
-        run: npx prisma db seed
+          # Use the direct Supabase DB host, not the pooler
+          DATABASE_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+        run: |
+          echo "Using DATABASE_URL for direct Supabase connection"
+          npx prisma db seed
