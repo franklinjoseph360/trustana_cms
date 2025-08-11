@@ -1,12 +1,13 @@
-import { PrismaClient, AttributeType } from '@prisma/client';
+// prisma/seeds/attributes.ts
+import { PrismaClient, AttributeType } from '@prisma/client'
 
 type AttrDef = {
-  slug: string;
-  name: string;
-  isGlobal?: boolean;
-  type: AttributeType;
-  linkToCategorySlugs?: string[];
-};
+  slug: string
+  name: string
+  isGlobal?: boolean
+  type: AttributeType
+  linkToCategorySlugs?: string[]
+}
 
 const ATTRIBUTES: AttrDef[] = [
   // Globals
@@ -40,125 +41,117 @@ const ATTRIBUTES: AttrDef[] = [
 
   // Dairy and frozen
   { slug: 'fat-percentage', name: 'Fat Percentage', type: AttributeType.NUMBER, linkToCategorySlugs: ['milk', 'yogurt', 'cheese', 'butter-and-cream'] },
-  { slug: 'storage',        name: 'Storage',        type: AttributeType.TEXT,   linkToCategorySlugs: ['dairy-and-eggs', 'frozen-and-ready-to-eat'] }, // parent for inheritance
-];
+  { slug: 'storage',        name: 'Storage',        type: AttributeType.TEXT,   linkToCategorySlugs: ['dairy-and-eggs', 'frozen-and-ready-to-eat'] },
+]
 
 export async function seedAttributes(prisma: PrismaClient) {
-  console.log('Seeding attributes and category links');
+  console.log('Seeding attributes and category links')
 
-  await prisma.$transaction(async tx => {
-    // Upsert attributes by slug or name to avoid unique(name) conflicts
-    const attrIdBySlug = new Map<string, string>();
+  // 1. Upsert attributes sequentially and collect ids by slug
+  const attrIdBySlug = new Map<string, string>()
 
-    for (const def of ATTRIBUTES) {
-      let existing = await tx.attribute.findUnique({
-        where: { slug: def.slug },
+  for (const def of ATTRIBUTES) {
+    // prefer unique by slug
+    let attr = await prisma.attribute.findUnique({
+      where: { slug: def.slug },
+      select: { id: true },
+    })
+
+    // if slug not present but name exists and is unique, adopt that record
+    if (!attr) {
+      const byName = await prisma.attribute.findUnique({
+        where: { name: def.name },
         select: { id: true },
-      });
-
-      if (!existing) {
-        const byName = await tx.attribute.findUnique({
-          where: { name: def.name },
+      })
+      if (byName) {
+        attr = await prisma.attribute.update({
+          where: { id: byName.id },
+          data: { slug: def.slug, isGlobal: !!def.isGlobal, type: def.type },
           select: { id: true },
-        });
-
-        if (byName) {
-          const updated = await tx.attribute.update({
-            where: { id: byName.id },
-            data: {
-              slug: def.slug,
-              isGlobal: !!def.isGlobal,
-              type: def.type,
-            },
-            select: { id: true },
-          });
-          existing = updated;
-        }
-      }
-
-      if (!existing) {
-        existing = await tx.attribute.create({
-          data: {
-            slug: def.slug,
-            name: def.name,
-            isGlobal: !!def.isGlobal,
-            type: def.type,
-          },
-          select: { id: true },
-        });
-      } else {
-        await tx.attribute.update({
-          where: { id: existing.id },
-          data: {
-            name: def.name,
-            isGlobal: !!def.isGlobal,
-            type: def.type,
-          },
-        });
-      }
-
-      attrIdBySlug.set(def.slug, existing.id);
-    }
-
-    // Build category id map for all referenced slugs
-    const categorySlugSet = new Set<string>();
-    for (const def of ATTRIBUTES) {
-      def.linkToCategorySlugs?.forEach(s => categorySlugSet.add(s));
-    }
-    const categorySlugs = Array.from(categorySlugSet);
-
-    const categories = categorySlugs.length
-      ? await tx.category.findMany({
-          where: { slug: { in: categorySlugs } },
-          select: { id: true, slug: true },
         })
-      : [];
-
-    const catIdBySlug = new Map(categories.map(c => [c.slug, c.id]));
-
-    // Prepare link rows from definitions
-    const linkRows: { categoryId: string; attributeId: string }[] = [];
-    for (const def of ATTRIBUTES) {
-      if (!def.linkToCategorySlugs?.length) continue;
-      const attributeId = attrIdBySlug.get(def.slug)!;
-
-      for (const slug of def.linkToCategorySlugs) {
-        const categoryId = catIdBySlug.get(slug);
-        if (!categoryId) {
-          console.warn(`[seedAttributes] Category slug not found: ${slug}`);
-          continue;
-        }
-        linkRows.push({ categoryId, attributeId });
       }
     }
 
-    // Keep links in sync only for the attributes defined in this seed
-    const linkedAttrIds = Array.from(
-      new Set(
-        ATTRIBUTES.filter(a => a.linkToCategorySlugs?.length).map(a => attrIdBySlug.get(a.slug)!),
-      ),
-    );
-    if (linkedAttrIds.length) {
-      await tx.categoryAttributeLink.deleteMany({
-        where: { attributeId: { in: linkedAttrIds } },
-      });
+    if (!attr) {
+      attr = await prisma.attribute.create({
+        data: {
+          slug: def.slug,
+          name: def.name,
+          isGlobal: !!def.isGlobal,
+          type: def.type,
+        },
+        select: { id: true },
+      })
+    } else {
+      await prisma.attribute.update({
+        where: { id: attr.id },
+        data: { name: def.name, isGlobal: !!def.isGlobal, type: def.type },
+      })
     }
 
-    // Ensure global attributes have no links
-    const globalAttrIds = ATTRIBUTES.filter(a => a.isGlobal).map(a => attrIdBySlug.get(a.slug)!);
-    if (globalAttrIds.length) {
-      await tx.categoryAttributeLink.deleteMany({
-        where: { attributeId: { in: globalAttrIds } },
-      });
-    }
+    attrIdBySlug.set(def.slug, attr.id)
+  }
 
-    if (linkRows.length) {
-      await tx.categoryAttributeLink.createMany({
-        data: linkRows,
-        skipDuplicates: true,
-      });
-    }
-  });
+  // 2. Resolve category ids for all referenced slugs
+  const categorySlugs = Array.from(
+    new Set(ATTRIBUTES.flatMap(a => a.linkToCategorySlugs ?? [])),
+  )
 
-  console.log('Attributes and links seeded');
+  const categories = categorySlugs.length
+    ? await prisma.category.findMany({
+        where: { slug: { in: categorySlugs } },
+        select: { id: true, slug: true },
+      })
+    : []
+
+  const catIdBySlug = new Map(categories.map(c => [c.slug, c.id]))
+
+  // 3. Build desired link set
+  const desiredLinks: { categoryId: string; attributeId: string }[] = []
+
+  for (const def of ATTRIBUTES) {
+    if (!def.linkToCategorySlugs?.length) continue
+    const attributeId = attrIdBySlug.get(def.slug)
+    if (!attributeId) continue
+
+    for (const slug of def.linkToCategorySlugs) {
+      const categoryId = catIdBySlug.get(slug)
+      if (!categoryId) {
+        console.warn(`[seedAttributes] category slug not found: ${slug}`)
+        continue
+      }
+      desiredLinks.push({ categoryId, attributeId })
+    }
+  }
+
+  // 4. Remove any existing links for attributes defined here, then insert desired set
+  const allAttrIdsInThisSeed = Array.from(
+    new Set(ATTRIBUTES.map(a => attrIdBySlug.get(a.slug)).filter(Boolean) as string[]),
+  )
+
+  if (allAttrIdsInThisSeed.length) {
+    await prisma.categoryAttributeLink.deleteMany({
+      where: { attributeId: { in: allAttrIdsInThisSeed } },
+    })
+  }
+
+  if (desiredLinks.length) {
+    await prisma.categoryAttributeLink.createMany({
+      data: desiredLinks,
+      skipDuplicates: true,
+    })
+  }
+
+  // 5. Ensure global attributes have no category links at all
+  const globalAttrIds = ATTRIBUTES.filter(a => a.isGlobal)
+    .map(a => attrIdBySlug.get(a.slug))
+    .filter(Boolean) as string[]
+
+  if (globalAttrIds.length) {
+    await prisma.categoryAttributeLink.deleteMany({
+      where: { attributeId: { in: globalAttrIds } },
+    })
+  }
+
+  console.log('Attributes and links seeded')
 }
