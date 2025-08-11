@@ -45,11 +45,33 @@ jobs:
       - name: Install
         run: npm ci
 
-      # use the DIRECT connection for migrations and seeding
       - name: Set DATABASE_URL for direct connection
+        env:
+          RAW: ${{ secrets.DATABASE_MIGRATION_URL }}
         run: |
-          echo "DATABASE_URL=${{ secrets.DATABASE_MIGRATION_URL }}" >> "$GITHUB_ENV"
-          node -e "const u=new URL(process.env.DATABASE_URL); if(u.hostname.includes('pooler.supabase.com')) { console.error('ERROR: DATABASE_MIGRATION_URL must be the direct host db.<ref>.supabase.co:5432'); process.exit(1);} console.log('Using direct host:', u.hostname)"
+          if [ -z "$RAW" ]; then
+            echo "ERROR: DATABASE_MIGRATION_URL secret is missing"
+            exit 1
+          fi
+
+          node -e 'const v=process.env.RAW; try{ new URL(v) } catch(e){ console.error("ERROR: DATABASE_MIGRATION_URL is not a valid URL"); process.exit(1) }'
+
+          node -e 'const u=new URL(process.env.RAW); if(u.hostname.includes("pooler.supabase.com")){ console.error("ERROR: Use the direct host db.<ref>.supabase.co:5432 for seeding, not the pooler"); process.exit(1) }'
+
+          URL="$RAW"
+          if node -e 'const u=new URL(process.env.URL); process.exit(u.searchParams.has("sslmode")?0:1)'; then
+            :
+          else
+            if [[ "$URL" == *"?"* ]]; then
+              URL="${URL}&sslmode=require"
+            else
+              URL="${URL}?sslmode=require"
+            fi
+          fi
+
+          echo "DATABASE_URL=$URL" >> "$GITHUB_ENV"
+          node -e 'const u=new URL(process.env.URL); console.log("[seed] Using host:", u.hostname, "port:", u.port || "5432")' | sed 's/.*/&/' \
+            || true
 
       - name: Generate Prisma client
         if: hashFiles('prisma/schema.prisma') != ''
