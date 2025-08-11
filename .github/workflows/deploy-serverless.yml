@@ -42,12 +42,12 @@ jobs:
       # Run migrations before build/deploy
       - name: Prisma migrate status
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
         run: npx prisma migrate status
 
       - name: Prisma migrate deploy
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
         run: npx prisma migrate deploy
 
       # optional build if you still compile for local runs
