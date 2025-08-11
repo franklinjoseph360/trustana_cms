@@ -39,12 +39,6 @@ jobs:
         if: hashFiles('prisma/schema.prisma') != ''
         run: npx prisma generate
 
-      # Run migrations before build/deploy
-      - name: Prisma migrate status
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
-        run: npx prisma migrate status
-
       - name: Prisma migrate deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
