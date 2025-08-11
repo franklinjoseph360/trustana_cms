@@ -12,8 +12,6 @@ env:
 
 jobs:
   deploy:
-    # uncomment if your ARN secret is stored as an Environment secret
-    # environment: prod
     runs-on: ubuntu-latest
 
     concurrency:
@@ -40,6 +38,17 @@ jobs:
       - name: Generate Prisma client
         if: hashFiles('prisma/schema.prisma') != ''
         run: npx prisma generate
+
+      # Run migrations before build/deploy
+      - name: Prisma migrate status
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma migrate status
+
+      - name: Prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma migrate deploy
 
       # optional build if you still compile for local runs
       - name: Build
