@@ -1,4 +1,5 @@
-import type { PrismaClient } from '@prisma/client'
+// prisma/seeds/categories.ts
+import type { PrismaClient, Prisma } from '@prisma/client'
 
 type CatInput = {
   slug: string
@@ -78,11 +79,12 @@ const catalog: CatInput[] = [
 ]
 
 export async function seedCategories(prisma: PrismaClient) {
-  console.log('Seeding categories and paths')
-
+  console.log('→ Seeding categories and tree paths')
   for (const root of catalog) {
-    await upsertCategoryTreeWithPaths(prisma, root, null)
+    const rootId = await upsertCategoryTreeWithPaths(prisma, root, null)
+    console.log(`  • Upserted root '${root.slug}' id=${rootId}`)
   }
+  console.log('✓ Category seed complete')
 }
 
 async function upsertCategoryTreeWithPaths(
@@ -91,7 +93,6 @@ async function upsertCategoryTreeWithPaths(
   parentId: string | null,
 ): Promise<string> {
   const hasChildren = Boolean(input.children?.length)
-
   const id = await upsertCategory(prisma, input, parentId, !hasChildren)
   await rebuildPathsForNode(prisma, id, parentId)
 
@@ -103,6 +104,10 @@ async function upsertCategoryTreeWithPaths(
   return id
 }
 
+/**
+ * Upserts a single category. For non-roots, uses the composite unique (slug,parentId).
+ * For roots (parentId=null), we cannot rely on composites with NULL, so do an update-or-create.
+ */
 async function upsertCategory(
   prisma: PrismaClient,
   input: CatInput,
@@ -110,61 +115,77 @@ async function upsertCategory(
   isLeaf: boolean,
 ): Promise<string> {
   if (parentId === null) {
+    // Root category (parentId null): manually update-or-create to avoid NULL composite-unique quirks
     const existing = await prisma.category.findFirst({
       where: { slug: input.slug, parentId: null },
       select: { id: true },
     })
+
     if (existing) {
-      const u = await prisma.category.update({
+      const updated = await prisma.category.update({
         where: { id: existing.id },
         data: { name: input.name, parentId: null, isLeaf },
         select: { id: true },
       })
-      return u.id
+      return updated.id
     }
-    const c = await prisma.category.create({
+
+    const created = await prisma.category.create({
       data: { slug: input.slug, name: input.name, parentId: null, isLeaf },
       select: { id: true },
     })
-    return c.id
+    return created.id
   }
 
-  const c = await prisma.category.upsert({
-    where: { slug_parentId: { slug: input.slug, parentId } as any },
-    update: { name: input.name, parentId, isLeaf },
-    create: { slug: input.slug, name: input.name, parentId, isLeaf },
+  // Non-root: rely on composite unique on (slug, parentId)
+  const res = await prisma.category.upsert({
+    where: { slug_parentId: { slug: input.slug, parentId } }, // requires @@unique([slug, parentId]) in Prisma schema
+    update: { name: input.name, isLeaf, parentId },
+    create: { slug: input.slug, name: input.name, isLeaf, parentId },
     select: { id: true },
   })
-  return c.id
+  return res.id
 }
 
+/**
+ * Rebuilds the closure-table paths for a node:
+ *  - delete all existing rows where child = this node
+ *  - insert self-path (depth 0)
+ *  - insert all ancestor paths derived from parent's paths
+ * Done inside a transaction for atomicity.
+ */
 async function rebuildPathsForNode(
   prisma: PrismaClient,
   catId: string,
   parentId: string | null,
 ) {
-  await prisma.categoryTreePath.deleteMany({ where: { childCategoryId: catId } })
+  await prisma.$transaction(async (tx) => {
+    // remove old paths for this child
+    await tx.categoryTreePath.deleteMany({ where: { childCategoryId: catId } })
 
-  const rows: { parentCategoryId: string; childCategoryId: string; depth: number }[] = [
-    { parentCategoryId: catId, childCategoryId: catId, depth: 0 },
-  ]
+    // always include self (depth 0)
+    const rows: Prisma.CategoryTreePathCreateManyInput[] = [
+      { parentCategoryId: catId, childCategoryId: catId, depth: 0 },
+    ]
 
-  if (parentId) {
-    const parentPaths = await prisma.categoryTreePath.findMany({
-      where: { childCategoryId: parentId },
-      select: { parentCategoryId: true, depth: true },
-      orderBy: { depth: 'asc' },
-    })
-    for (const p of parentPaths) {
-      rows.push({
-        parentCategoryId: p.parentCategoryId,
-        childCategoryId: catId,
-        depth: p.depth + 1,
+    if (parentId) {
+      const parentPaths = await tx.categoryTreePath.findMany({
+        where: { childCategoryId: parentId },
+        select: { parentCategoryId: true, depth: true },
+        orderBy: { depth: 'asc' },
       })
-    }
-  }
 
-  if (rows.length) {
-    await prisma.categoryTreePath.createMany({ data: rows, skipDuplicates: true })
-  }
+      for (const p of parentPaths) {
+        rows.push({
+          parentCategoryId: p.parentCategoryId,
+          childCategoryId: catId,
+          depth: p.depth + 1,
+        })
+      }
+    }
+
+    if (rows.length) {
+      await tx.categoryTreePath.createMany({ data: rows, skipDuplicates: true })
+    }
+  })
 }
