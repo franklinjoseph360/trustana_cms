@@ -1,12 +1,37 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { All, ValidationPipe } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import 'reflect-metadata';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { AllExceptionsFilter } from './common/filters/AllExceptionsFilter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  const isProd = process.env.NODE_ENV === 'production';
+  const corsOrigins = process.env.CORS_ORIGINS
+    ?.split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  if (!isProd) {
+    // Dev CORS
+    app.enableCors({
+      origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+      credentials: true,
+      maxAge: 86400,
+    });
+  } else if (corsOrigins?.length) {
+    // Prod CORS driven by env
+    app.enableCors({
+      origin: corsOrigins,
+      methods: ['GET', 'POST', 'PUT', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+      credentials: true,
+      maxAge: 86400,
+    });
+  }
 
   app.useGlobalPipes(
     new ValidationPipe({
