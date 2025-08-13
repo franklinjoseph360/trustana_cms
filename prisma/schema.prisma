@@ -1,12 +1,8 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// prisma/schema.prisma
 
 generator client {
   provider      = "prisma-client-js"
-  binaryTargets = ["native", "linux-arm64-openssl-1.0.x"] 
+  binaryTargets = ["native", "linux-arm64-openssl-1.0.x"]
 }
 
 datasource db {
@@ -22,25 +18,32 @@ enum AttributeType {
 }
 
 model Category {
-  id               String             @id @default(uuid())
-  name             String
-  slug             String
-  isLeaf           Boolean            @default(false)
-  parentId         String?
-  parent           Category?          @relation("CategoryToChildren", fields: [parentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  children         Category[]         @relation("CategoryToChildren")
-  products         Product[]
+  id     String  @id @default(uuid())
+  name   String
+  slug   String
+  isLeaf Boolean @default(false)
 
-  attributeLinks   CategoryAttributeLink[] @relation("CategoryToAttributeLinks")
+  parentId String?
+  parent   Category?  @relation("CategoryToChildren", fields: [parentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  children Category[] @relation("CategoryToChildren")
 
-  parentPaths      CategoryTreePath[] @relation("ChildToTreePath")
-  childPaths       CategoryTreePath[] @relation("ParentToTreePath")
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  // standard relation to Product
+  products Product[]
 
-  @@index([parentId])
+  // link-table back-relations
+  productLinks   CategoryProductLink[]
+  attributeLinks CategoryAttributeLink[] @relation("CategoryToAttributeLinks")
+
+  // closure table for tree paths
+  parentPaths CategoryTreePath[] @relation("ChildToTreePath")
+  childPaths  CategoryTreePath[] @relation("ParentToTreePath")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([name, parentId])
   @@unique([slug, parentId])
+  @@index([parentId])
 }
 
 model CategoryTreePath {
@@ -48,8 +51,8 @@ model CategoryTreePath {
   childCategoryId  String
   depth            Int
 
-  parentCategory   Category @relation("ParentToTreePath", fields: [parentCategoryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  childCategory    Category @relation("ChildToTreePath",  fields: [childCategoryId],  references: [id], onDelete: Cascade, onUpdate: Cascade)
+  parentCategory Category @relation("ParentToTreePath", fields: [parentCategoryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  childCategory  Category @relation("ChildToTreePath", fields: [childCategoryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@id([parentCategoryId, childCategoryId])
   @@index([childCategoryId])
@@ -57,60 +60,92 @@ model CategoryTreePath {
 }
 
 model Product {
-  id          String    @id @default(uuid())
-  name        String
-  categoryId  String
-  category    Category  @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  attributes  ProductAttributeValue[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id   String @id @default(uuid())
+  name String
 
-  @@index([categoryId])
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  // back-relations to value and link tables
+  attributes     ProductAttributeValue[]
+  attributeLinks ProductAttributeLink[]
+  categoryLinks  CategoryProductLink[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Attribute {
-  id         String                    @id @default(uuid())
-  name       String
-  slug       String
-  isGlobal   Boolean                   @default(false)
-  type       AttributeType             @default(TEXT)
+  id   String        @id @default(uuid())
+  name String
+  slug String        @unique
+  type AttributeType
 
-  links      CategoryAttributeLink[]   @relation("AttributeToCategoryLinks")
+  // back-relations to value and link tables
+  values        ProductAttributeValue[]
+  productLinks  ProductAttributeLink[]
+  categoryLinks CategoryAttributeLink[] @relation("AttributeToCategoryLinks")
 
-  values     ProductAttributeValue[]
-  createdAt  DateTime                  @default(now())
-  updatedAt  DateTime                  @updatedAt
-
-  @@unique([name])
-  @@unique([slug])
-  @@index([isGlobal])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model CategoryAttributeLink {
   categoryId  String
   attributeId String
 
-  category    Category  @relation("CategoryToAttributeLinks", fields: [categoryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  attribute   Attribute @relation("AttributeToCategoryLinks", fields: [attributeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  category  Category  @relation("CategoryToAttributeLinks", fields: [categoryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  attribute Attribute @relation("AttributeToCategoryLinks", fields: [attributeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@id([categoryId, attributeId])
   @@index([attributeId])
   @@index([categoryId])
 }
 
-model ProductAttributeValue {
-  productId    String
-  attributeId  String
+model CategoryProductLink {
+  id         String @id @default(uuid())
+  categoryId String
+  productId  String
 
-  valueString  String?
-  valueNumber  Float?
-  valueBoolean Boolean?
-  valueJson    Json?
+  category Category @relation(fields: [categoryId], references: [id])
+  product  Product  @relation(fields: [productId], references: [id])
 
-  product      Product   @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  attribute    Attribute @relation(fields: [attributeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdAt DateTime @default(now())
 
-  @@id([productId, attributeId])
+  @@unique([categoryId, productId])
+  @@index([categoryId])
+  @@index([productId])
+}
+
+model ProductAttributeLink {
+  id          String @id @default(uuid())
+  productId   String
+  attributeId String
+
+  product   Product   @relation(fields: [productId], references: [id])
+  attribute Attribute @relation(fields: [attributeId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([productId, attributeId])
   @@index([attributeId])
   @@index([productId])
+}
+
+model ProductAttributeValue {
+  id          String @id @default(uuid())
+  productId   String
+  attributeId String
+
+  product   Product   @relation(fields: [productId], references: [id])
+  attribute Attribute @relation(fields: [attributeId], references: [id])
+
+  // add your value columns here: textValue, numberValue, booleanValue, jsonValue, etc.
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, attributeId])
+  @@index([productId])
+  @@index([attributeId])
 }
