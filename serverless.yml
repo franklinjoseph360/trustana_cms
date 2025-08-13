@@ -38,7 +38,7 @@ provider:
 functions:
   api:
     name: trustana-cms-api-prod
-    handler: src/lambda.handler
+    handler: dist/lambda.handler
     events:
       - httpApi:
           method: ANY
