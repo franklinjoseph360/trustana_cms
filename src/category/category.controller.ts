@@ -1,13 +1,23 @@
-import { Body, Controller, Delete, Get, Inject, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query } from '@nestjs/common';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 
+export type TreeNode = {
+  id: string
+  name: string
+  slug: string
+  parentId: string | null
+  isLeaf: boolean
+  counts: { attributesDirect: number; products: number }
+  children: TreeNode[]
+}
+
 @ApiTags('categories')
 @Controller('categories')
 export class CategoryController {
-  constructor(@Inject(CategoryService) private readonly svc: CategoryService) {}
+  constructor(@Inject(CategoryService) private readonly svc: CategoryService) { }
 
   @Post()
   create(@Body() dto: CreateCategoryDto) {
@@ -17,8 +27,8 @@ export class CategoryController {
   @ApiOperation({ summary: 'Get category tree' })
   @ApiOkResponse({ description: 'Array of Category nodes with nested children (categories)' })
   @Get('tree')
-  tree() {
-    return this.svc.getTree();
+  tree(): Promise<TreeNode[]> {
+    return this.svc.getTree()
   }
 
   @Get()
