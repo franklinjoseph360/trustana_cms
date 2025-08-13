@@ -18,6 +18,26 @@ provider:
     NODE_OPTIONS: "--enable-source-maps"
     AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
     DATABASE_URL: ${ssm:/trustana-cms/prod/DATABASE_URL}
+  httpApi:
+    cors:
+      allowedOrigins:
+        - https://trustana-cms.vercel.app
+        - https://*.vercel.app   # for preview domains
+        - http://localhost:5173   # local front-end
+        - http://127.0.0.1:5173
+      allowedHeaders:
+        - Content-Type
+        - Authorization
+        - X-Requested-With
+      allowedMethods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - OPTIONS
+      allowCredentials: false
+      maxAge: 86400
 
   iam:
     role:

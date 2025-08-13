@@ -31,7 +31,6 @@ async function bootstrap() {
   );
 
   // exception filters
-  const adapterHost = app.get(HttpAdapterHost);
   app.useGlobalFilters(
     new PrismaExceptionFilter(),
     new AllExceptionsFilter(),

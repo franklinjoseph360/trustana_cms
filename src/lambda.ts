@@ -14,6 +14,14 @@ import { PrismaExceptionFilter } from './common/filters/PrismaExceptionFilter'
 
 let cached: Handler | null = null
 
+const allowed = [
+  'https://trustana-cms.vercel.app',
+  // optional: preview deployments
+  /\.vercel\.app$/,
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+];
+
 async function bootstrap(): Promise<Handler> {
   const expressApp = express()
   const app = await NestFactory.create(
@@ -22,7 +30,19 @@ async function bootstrap(): Promise<Handler> {
     { bufferLogs: true, logger: false }, // logger off, we log to stderr ourselves
   )
 
-  app.enableCors()
+  app.enableCors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // curl/postman
+      if (allowed.includes(origin) || allowed.some((o) => o instanceof RegExp && (o as RegExp).test(origin))) {
+        return cb(null, true);
+      }
+      cb(new Error('Not allowed by CORS'));
+    },
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    credentials: false, // set true only if you actually send cookies/auth
+    maxAge: 86400,
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -34,10 +54,10 @@ async function bootstrap(): Promise<Handler> {
   )
 
   // Register the global exception filter so errors are logged to stderr
-    app.useGlobalFilters(
-      new PrismaExceptionFilter(),
-      new AllExceptionsFilter(),
-    );
+  app.useGlobalFilters(
+    new PrismaExceptionFilter(),
+    new AllExceptionsFilter(),
+  );
 
   // Swagger
   const config = new DocumentBuilder()
@@ -55,7 +75,7 @@ async function bootstrap(): Promise<Handler> {
   // One line on cold start so you can confirm logs are flowing
   try {
     console.error(JSON.stringify({ level: 'info', ts: new Date().toISOString(), msg: 'Lambda cold start ready' }))
-  } catch {}
+  } catch { }
 
   return serverlessExpress({ app: expressApp })
 }
