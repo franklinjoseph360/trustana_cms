@@ -10,6 +10,7 @@ import express from 'express'
 import { ValidationPipe } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { AllExceptionsFilter } from './common/filters/AllExceptionsFilter'
+import { PrismaExceptionFilter } from './common/filters/PrismaExceptionFilter'
 
 let cached: Handler | null = null
 
@@ -33,7 +34,10 @@ async function bootstrap(): Promise<Handler> {
   )
 
   // Register the global exception filter so errors are logged to stderr
-  app.useGlobalFilters(new AllExceptionsFilter())
+    app.useGlobalFilters(
+      new PrismaExceptionFilter(),
+      new AllExceptionsFilter(),
+    );
 
   // Swagger
   const config = new DocumentBuilder()
