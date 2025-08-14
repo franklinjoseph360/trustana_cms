@@ -24,7 +24,7 @@ async function bootstrap(): Promise<Handler> {
   app.enableCors(corsOptions);
 
   // Helpful for API Gateway preflight
-  expressApp.options('*', (_req, res) => res.sendStatus(204));
+  expressApp.options(/.*/, (_req, res) => res.sendStatus(204));
 
   app.useGlobalPipes(
     new ValidationPipe({
