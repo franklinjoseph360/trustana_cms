@@ -202,28 +202,38 @@ export class AttributeService {
       }
     }
 
-    // Query (get global productsInUse via _count for the no-category case)
-    const [total, pageItems] = await Promise.all([
-      this.prisma.attribute.count({ where }),
-      this.prisma.attribute.findMany({
-        where,
-        orderBy,
-        skip,
-        take,
-        include: {
-          categoryLinks: {
-            include: {
-              category: { select: { id: true, name: true, slug: true } },
-            },
-          },
-          _count: {
-            select: {
-              productLinks: true, // global count fallback
-            },
-          },
-        },
-      }),
-    ]);
+    // 1. Page items without relation _count
+    const pageItems = await this.prisma.attribute.findMany({
+      where,
+      orderBy,
+      skip,
+      take,
+      include: {
+        categoryLinks: { include: { category: { select: { id: true, name: true, slug: true } } } },
+      },
+    });
+
+    // 2. Total via aggregate count on the same filter
+    const totalAgg = await this.prisma.attribute.aggregate({
+      where,
+      _count: { _all: true },
+    });
+    const total = totalAgg._count?._all ?? 0;
+
+    let globalProductsInUse: Map<string, number> | undefined;
+
+    if (!categoryIds?.length && pageItems.length) {
+      const attrIds = pageItems.map(a => a.id);
+      const grouped = await this.prisma.productAttributeLink.groupBy({
+        by: ['attributeId'],
+        where: { attributeId: { in: attrIds } },
+        _count: { productId: true }, // one row per (productId, attributeId)
+      });
+
+      globalProductsInUse = new Map(
+        grouped.map(g => [g.attributeId, g._count.productId]),
+      );
+    }
 
     // --- Compute productsInUse scoped to selected categories (and all their descendants) ---
     let scopedProductsInUse: Map<string, number> | undefined;
@@ -320,7 +330,7 @@ export class AttributeService {
         // counts
         productsInUse: scopedProductsInUse
           ? (scopedProductsInUse.get(a.id) ?? 0) // scoped to selected categories
-          : (a as any)._count?.productLinks ?? 0, // global fallback
+          : (globalProductsInUse?.get(a.id) ?? 0), 
         // categories
         categories: a.categoryLinks.map(l => l.category),
         // applicability (only when categories were provided)
