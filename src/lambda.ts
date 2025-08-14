@@ -15,23 +15,19 @@ let cached: Handler | null = null
 
 // Build one allowlist
 const fromEnv =
-  process.env.CORS_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean) ?? []
+  process.env.CORS_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean) ?? [];
 const ALLOWLIST: (string | RegExp)[] = [
   ...fromEnv,
   'https://trustana-cms.vercel.app',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   /\.vercel\.app$/i, // preview deploys
-  // Swagger runs on your API origin, so if the list is empty we will reflect any origin below
-]
+];
 
-// helper
-function isAllowed(origin: string): boolean {
-  for (const rule of ALLOWLIST) {
-    if (typeof rule === 'string' && rule === origin) return true
-    if (rule instanceof RegExp && rule.test(origin)) return true
-  }
-  return false
+function isAllowed(origin: string) {
+  return ALLOWLIST.some(rule =>
+    typeof rule === 'string' ? rule === origin : rule.test(origin)
+  );
 }
 
 async function bootstrap(): Promise<Handler> {
@@ -44,17 +40,17 @@ async function bootstrap(): Promise<Handler> {
 
   // one CORS config
   app.enableCors({
-    origin: (origin, cb) => {
-      if (!origin) return cb(null, true)          // curl or Postman
-      if (ALLOWLIST.length === 0) return cb(null, true) // reflect any origin
-      return cb(null, isAllowed(origin))
+    origin(origin, cb) {
+      if (!origin) return cb(null, true);
+      if (ALLOWLIST.length === 0) return cb(null, true);
+      cb(null, isAllowed(origin)); // false will just omit CORS headers, not 500
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Client-ID'],
     exposedHeaders: ['Content-Length', 'Content-Range'],
-    credentials: false, // set true only if you actually use cookies
+    credentials: false,
     maxAge: 86400,
-  })
+  });
 
   // optional: make sure OPTIONS always gets a fast 204
   expressApp.options('*', (_req, res) => {
@@ -90,7 +86,7 @@ async function bootstrap(): Promise<Handler> {
 
   try {
     console.error(JSON.stringify({ level: 'info', ts: new Date().toISOString(), msg: 'Lambda cold start ready' }))
-  } catch {}
+  } catch { }
 
   return serverlessExpress({ app: expressApp })
 }

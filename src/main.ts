@@ -27,30 +27,35 @@ async function bootstrap() {
   // One CORS config for all environments
   const fromEnv =
     process.env.CORS_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean) ?? [];
-  const ALLOWLIST = new Set([
+  const ALLOWLIST: (string | RegExp)[] = [
     ...fromEnv,
+    'https://trustana-cms.vercel.app',
     'http://localhost:5173',
     'http://127.0.0.1:5173',
-    // add your frontend prod origin here if you want a strict list:
-    // 'https://trustana-cms.vercel.app',
-    // Swagger UI origin will be your API Gateway URL. If you keep the list empty, we reflect any origin below.
-  ]);
+    /\.vercel\.app$/i, // preview deploys
+  ];
+
+  function isAllowed(origin: string) {
+    return ALLOWLIST.some(rule =>
+      typeof rule === 'string' ? rule === origin : rule.test(origin)
+    );
+  }
 
   app.enableCors({
     origin(origin, cb) {
-      // Allow server-to-server and same-origin requests
+      // server-to-server or same-origin
       if (!origin) return cb(null, true);
-      // If no allowlist provided, reflect the request origin to support Swagger and any frontend
-      if (ALLOWLIST.size === 0) return cb(null, true);
-      cb(null, ALLOWLIST.has(origin));
+      // if no allowlist provided, reflect any origin (Swagger-friendly)
+      if (ALLOWLIST.length === 0) return cb(null, true);
+      // allow or silently deny; DO NOT pass an Error here
+      cb(null, isAllowed(origin));
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Client-ID'],
     exposedHeaders: ['Content-Length', 'Content-Range'],
-    credentials: true, // set to false if you never use cookies
+    credentials: false,          // set to true only if you really use cookies
     maxAge: 86400,
   });
-
   const config = new DocumentBuilder()
     .setTitle('Trustana Attributes API')
     .setVersion('1.0.0')
