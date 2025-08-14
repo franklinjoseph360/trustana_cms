@@ -1,13 +1,16 @@
 import 'reflect-metadata';
 import { Logger, ValidationPipe } from '@nestjs/common';
-import { NestFactory, HttpAdapterHost } from '@nestjs/core';
+import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/AllExceptionsFilter';
 import { PrismaExceptionFilter } from './common/filters/PrismaExceptionFilter';
+import { corsOptions } from './common/cors.options';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: false });
+  app.enableCors(corsOptions);
+
   app.useLogger(['log', 'error', 'warn', 'debug', 'verbose']);
 
   // catch truly uncaught errors
@@ -35,27 +38,6 @@ async function bootstrap() {
     new PrismaExceptionFilter(),
     new AllExceptionsFilter(),
   );
-
-  // cors
-  const isProd = process.env.NODE_ENV === 'production';
-  const corsOrigins = process.env.CORS_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean);
-  if (!isProd) {
-    app.enableCors({
-      origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
-      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-      credentials: true,
-      maxAge: 86400,
-    });
-  } else if (corsOrigins?.length) {
-    app.enableCors({
-      origin: corsOrigins,
-      methods: ['GET', 'POST', 'PUT', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-      credentials: true,
-      maxAge: 86400,
-    });
-  }
 
   // swagger
   const config = new DocumentBuilder()

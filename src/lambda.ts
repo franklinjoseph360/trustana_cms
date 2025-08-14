@@ -1,4 +1,3 @@
-// src/lambda.ts
 import 'source-map-support/register'
 import 'reflect-metadata'
 import { Handler } from 'aws-lambda'
@@ -11,16 +10,9 @@ import { ValidationPipe } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { AllExceptionsFilter } from './common/filters/AllExceptionsFilter'
 import { PrismaExceptionFilter } from './common/filters/PrismaExceptionFilter'
+import { corsOptions } from './common/cors.options'
 
 let cached: Handler | null = null
-
-const allowed = [
-  'https://trustana-cms.vercel.app',
-  // optional: preview deployments
-  /\.vercel\.app$/,
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-];
 
 async function bootstrap(): Promise<Handler> {
   const expressApp = express()
@@ -29,20 +21,10 @@ async function bootstrap(): Promise<Handler> {
     new ExpressAdapter(expressApp),
     { bufferLogs: true, logger: false }, // logger off, we log to stderr ourselves
   )
+  app.enableCors(corsOptions);
 
-  app.enableCors({
-    origin: (origin, cb) => {
-      if (!origin) return cb(null, true); // curl/postman
-      if (allowed.includes(origin) || allowed.some((o) => o instanceof RegExp && (o as RegExp).test(origin))) {
-        return cb(null, true);
-      }
-      cb(new Error('Not allowed by CORS'));
-    },
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    credentials: false, // set true only if you actually send cookies/auth
-    maxAge: 86400,
-  });
+  // Helpful for API Gateway preflight
+  expressApp.options('*', (_req, res) => res.sendStatus(204));
 
   app.useGlobalPipes(
     new ValidationPipe({
