@@ -7,7 +7,8 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url       = env("DATABASE_URL")            // pooled for runtime
+  url       = env("DATABASE_URL")   // pooled for runtime (PgBouncer)
+  directUrl = env("DIRECT_URL")     // direct for migrate/seed
 }
 
 enum AttributeType {

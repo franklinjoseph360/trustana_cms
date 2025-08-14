@@ -17,6 +17,10 @@ jobs:
     if: ${{ github.event.inputs.confirm == 'SEED' }}
     runs-on: ubuntu-latest
 
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}                 # pooled
+      DIRECT_URL:   ${{ secrets.DATABASE_MIGRATION_URL }}       # direct
+
     permissions:
       contents: read
 
@@ -33,14 +37,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Show Prisma env
+        run: npx prisma env
+
       - name: Generate Prisma client
         if: hashFiles('prisma/schema.prisma') != ''
         run: npx prisma generate
 
       - name: Run Prisma seed
-        env:
-          # Use the direct Supabase DB host, not the pooler
-          DATABASE_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
-        run: |
-          echo "Using DATABASE_URL for direct Supabase connection"
-          npx prisma db seed
+        run: npx prisma db seed

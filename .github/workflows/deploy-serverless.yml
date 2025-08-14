@@ -14,6 +14,11 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    # Make DB envs available to all steps that run Prisma
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}                       # pooled (PgBouncer 6543)
+      DIRECT_URL:   ${{ secrets.DATABASE_MIGRATION_URL }}             # direct (5432)
+
     concurrency:
       group: deploy-prod
       cancel-in-progress: false
@@ -35,16 +40,17 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Show Prisma env
+        run: npx prisma env
+
       - name: Generate Prisma client
         if: hashFiles('prisma/schema.prisma') != ''
         run: npx prisma generate
 
+      # Prisma will automatically use directUrl for migrations
       - name: Prisma migrate deploy
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
         run: npx prisma migrate deploy
 
-      # optional build if you still compile for local runs
       - name: Build
         run: npm run build || echo "skip build"
 
