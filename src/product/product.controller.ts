@@ -12,7 +12,16 @@ import {
   ValidationPipe,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiOkResponse, ApiCreatedResponse, ApiNoContentResponse, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiOkResponse,
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiParam,
+  ApiQuery,
+  ApiBody,
+} from '@nestjs/swagger';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -28,22 +37,24 @@ export class ProductController {
   @ApiBody({
     type: CreateProductDto,
     examples: {
+      wholegrainBread: {
+        summary: 'With attribute values (your payload)',
+        value: {
+          name: 'Wholegrain Bread',
+          categoryId: '5a936a12-164b-411e-af04-7586ac3bbf1e',
+          attributeValues: [
+            {
+              attributeId: '8ce331ee-1793-498d-a835-123376bd1064',
+              value: '20',
+            },
+          ],
+        },
+      },
       basic: {
         summary: 'Minimal payload',
         value: {
           name: 'Espresso',
           categoryId: 'c3a5d3c2-0c0a-4e7a-9a6f-1b1c9c7b0f10',
-        },
-      },
-      withAttributes: {
-        summary: 'With attribute values',
-        value: {
-          name: 'Espresso',
-          categoryId: 'c3a5d3c2-0c0a-4e7a-9a6f-1b1c9c7b0f10',
-          attributeValues: [
-            { attributeId: 'a1111111-2222-3333-4444-555555555555', value: '250' },
-            { attributeId: 'b1111111-2222-3333-4444-555555555555', value: 'Arabica' },
-          ],
         },
       },
     },
@@ -102,12 +113,11 @@ export class ProductController {
         summary: 'Move to another category',
         value: { categoryId: '11111111-2222-3333-4444-555555555555' },
       },
-      attributes: {
+      replaceAttributes: {
         summary: 'Replace attribute values',
         value: {
           attributeValues: [
-            { attributeId: 'a1111111-2222-3333-4444-555555555555', value: '300' },
-            { attributeId: 'b1111111-2222-3333-4444-555555555555', value: 'Robusta' },
+            { attributeId: '8ce331ee-1793-498d-a835-123376bd1064', value: '24' },
           ],
         },
       },
